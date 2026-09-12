@@ -2,7 +2,7 @@
 
 use aircraft_geom::metrics::{planform_metrics, volume_metrics};
 use aircraft_geom::quality::{resolve_quality, ExportTolerances, MeshQuality};
-use aircraft_geom::section::{Ring, StationSpec, TrailingEdgeSpec};
+use aircraft_geom::section::{StationSpec, TrailingEdgeSpec};
 use aircraft_geom::wing::EvaluatedStation;
 use aircraft_geom::{build_wing_mesh, ProfileCurve};
 use aircraft_model::Diagnostic;
@@ -251,14 +251,6 @@ fn rectangular_diamond_wing_volume_is_exact() {
         "full volume {full_volume} vs {}",
         2.0 * expected_half
     );
-}
-
-fn curve_closed_polygon_chord_scale(curve: &ProfileCurve, chord: f64) -> Vec<[f64; 2]> {
-    curve
-        .closed_loop()
-        .iter()
-        .map(|p| [p[0] * chord, p[1] * chord])
-        .collect()
 }
 
 #[test]

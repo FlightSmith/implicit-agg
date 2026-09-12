@@ -47,14 +47,17 @@ Those capabilities have explicit extension points so the future buried-engine / 
 
 ## Implementation status
 
-Milestone 0 (foundation core) is implemented as a Rust workspace:
+Milestones 0 and 1 are implemented as a Rust workspace:
 
 - `crates/aircraft-model` — typed v0.1 document model, JSON Schema validation, semantic checks.
 - `crates/aircraft-expr` — the typed dimensional expression language (parser, checker, evaluator).
 - `crates/aircraft-graph` — the dependency graph: reference resolution, parameter dimension inference, cycle detection, deterministic evaluation, physical predicates.
-- `apps/cli` — headless `validate` and `evaluate` commands; the fixture harness under `examples/fixtures/`.
+- `crates/aircraft-geom` — profiles (NACA 4-series, normalized coordinates with lossless repair), station sections with twist and trailing-edge closure, lofting, symmetry mirror and centerline weld, manifold validation, adaptive meshing, planform and volume metrics.
+- `crates/meshio` — binary/ASCII STL, OBJ, and GLB export.
+- `crates/aircraft-engine` — the service API: transactional patches with affected-node reporting, cancellation tokens and stale-revision guards, content-addressed mesh cache, selection tracing, derived reports.
+- `apps/cli` — headless `validate`, `evaluate`, and `report` commands; the fixture harness under `examples/fixtures/`.
 
-Milestone 1 (parametric half wing: profiles, loft, meshing, metrics) comes next; see the [implementation plan](docs/10-implementation-plan.md).
+Milestone 2 (the live Tauri/React workspace) comes next; see the [implementation plan](docs/10-implementation-plan.md).
 
 ### Building and testing
 
@@ -63,4 +66,5 @@ cargo test --workspace                 # unit, integration, and fixture tests
 cargo clippy --workspace --all-targets # lint gate (CI runs this with -D warnings)
 cargo run -p aircraft-cli -- validate examples/cranked-wing.v0.1.json
 cargo run -p aircraft-cli -- evaluate examples/cranked-wing.v0.1.json
+cargo run -p aircraft-cli -- report examples/cranked-wing.v0.1.json
 ```

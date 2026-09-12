@@ -9,6 +9,7 @@ name = "aircraft"
 path = "src/main.rs"
 
 [dependencies]
+aircraft-engine = { version = "0.1.0", path = "../../crates/aircraft-engine" }
 aircraft-graph = { version = "0.1.0", path = "../../crates/aircraft-graph" }
 aircraft-model = { version = "0.1.0", path = "../../crates/aircraft-model" }
 clap.workspace = true

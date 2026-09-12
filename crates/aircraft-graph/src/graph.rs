@@ -33,6 +33,7 @@ pub struct Graph {
     param_nodes: BTreeMap<String, NodeId>,
     station_nodes: HashMap<(usize, String), StationNodes>,
     component_stations: HashMap<usize, Vec<String>>,
+    frame_nodes: HashMap<usize, [NodeId; 3]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -79,6 +80,7 @@ pub fn build(
         param_nodes: builder.param_nodes,
         station_nodes: builder.station_nodes,
         component_stations: builder.component_stations,
+        frame_nodes: builder.frame_nodes,
     };
     Ok((graph, warnings))
 }
@@ -86,6 +88,13 @@ pub fn build(
 impl Graph {
     pub fn parameter_node(&self, id: &str) -> Option<NodeId> {
         self.param_nodes.get(id).copied()
+    }
+
+    /// Node of a wing frame origin coordinate (`axis` 0/1/2 = x/y/z).
+    pub fn frame_origin_node(&self, component_index: usize, axis: usize) -> Option<NodeId> {
+        self.frame_nodes
+            .get(&component_index)
+            .map(|axes| axes[axis])
     }
 
     pub fn station_field_node(
@@ -335,6 +344,8 @@ struct Builder<'a> {
     station_nodes: HashMap<(usize, String), StationNodes>,
     /// Per component index: ordered station ids.
     component_stations: HashMap<usize, Vec<String>>,
+    /// Per component index: frame origin node ids.
+    frame_nodes: HashMap<usize, [NodeId; 3]>,
     errors: Vec<Diagnostic>,
 }
 
@@ -346,6 +357,7 @@ impl<'a> Builder<'a> {
             param_nodes: BTreeMap::new(),
             station_nodes: HashMap::new(),
             component_stations: HashMap::new(),
+            frame_nodes: HashMap::new(),
             errors: Vec::new(),
         }
     }
@@ -379,18 +391,22 @@ impl<'a> Builder<'a> {
     }
 
     fn create_frame_origin_nodes(&mut self, component_index: usize, wing: &Wing) {
-        for (axis, coordinate) in [
+        let mut frame = [0usize; 3];
+        for (axis_index, (axis, coordinate)) in [
             ("x", Coordinate::X),
             ("y", Coordinate::Y),
             ("z", Coordinate::Z),
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let typed = match coordinate {
                 Coordinate::X => &wing.frame.origin.x,
                 Coordinate::Y => &wing.frame.origin.y,
                 Coordinate::Z => &wing.frame.origin.z,
             };
             let path = format!("components/{component_index}/frame/origin/{axis}");
-            self.push_field_node(
+            frame[axis_index] = self.push_field_node(
                 NodeKind::FrameOrigin {
                     component_index,
                     coordinate,
@@ -402,6 +418,7 @@ impl<'a> Builder<'a> {
                 typed,
             );
         }
+        self.frame_nodes.insert(component_index, frame);
     }
 
     fn create_station_nodes(

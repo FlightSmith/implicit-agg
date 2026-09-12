@@ -29,6 +29,7 @@ dependencies = [
 name = "aircraft-cli"
 version = "0.1.0"
 dependencies = [
+ "aircraft-engine",
  "aircraft-graph",
  "aircraft-model",
  "clap",
@@ -37,6 +38,13 @@ dependencies = [
 [[package]]
 name = "aircraft-engine"
 version = "0.1.0"
+dependencies = [
+ "aircraft-geom",
+ "aircraft-graph",
+ "aircraft-model",
+ "meshio",
+ "serde_json",
+]
 
 [[package]]
 name = "aircraft-expr"

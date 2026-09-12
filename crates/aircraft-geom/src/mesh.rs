@@ -251,6 +251,14 @@ pub fn vnorm(a: [f64; 3]) -> f64 {
 }
 
 pub fn lerp3(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
+    // Endpoint exactness matters: panel-boundary rings are welded bit-exactly,
+    // so `t = 1` must return `b` itself, not `a + (b - a)` (off by an ULP).
+    if t == 0.0 {
+        return a;
+    }
+    if t == 1.0 {
+        return b;
+    }
     [
         a[0] + (b[0] - a[0]) * t,
         a[1] + (b[1] - a[1]) * t,

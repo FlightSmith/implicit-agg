@@ -26,6 +26,8 @@ enum Command {
     Validate { path: PathBuf },
     /// Validate, then print the evaluated station table in document units.
     Evaluate { path: PathBuf },
+    /// Validate, then generate geometry and print the derived report.
+    Report { path: PathBuf },
 }
 
 /// Exit codes: 0 valid, 1 error diagnostics, 2 usage or I/O failure.
@@ -48,15 +50,16 @@ where
         Err(error) => return (EXIT_FAILURE, format!("{error}\n")),
     };
 
-    let (path, evaluate) = match cli.command {
-        Command::Validate { path } => (path, false),
-        Command::Evaluate { path } => (path, true),
+    let (path, command) = match cli.command {
+        Command::Validate { path } => (path, CommandKind::Validate),
+        Command::Evaluate { path } => (path, CommandKind::Evaluate),
+        Command::Report { path } => (path, CommandKind::Report),
     };
-    let code = run_command(&path, evaluate, &mut output);
+    let code = run_command(&path, command, &mut output);
     (code, output)
 }
 
-fn run_command(path: &Path, evaluate: bool, out: &mut String) -> i32 {
+fn run_command(path: &Path, command: CommandKind, out: &mut String) -> i32 {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) => {
@@ -89,8 +92,45 @@ fn run_command(path: &Path, evaluate: bool, out: &mut String) -> i32 {
     diagnostics.extend(evaluation.diagnostics.clone());
     diagnostics.extend(check_predicates(&graph, &doc, &evaluation));
 
-    if evaluate {
-        print_stations(out, &doc, &graph, &evaluation.values);
+    if let Some(error) = diagnostics.iter().find(|d| d.is_error()) {
+        let _ = writeln!(out, "stopping before {}: {error}", command.description());
+        print_summary(out, &doc, &diagnostics);
+        let _ = writeln!(out, "result: invalid");
+        return EXIT_DIAGNOSTICS;
+    }
+
+    match command {
+        CommandKind::Validate => {}
+        CommandKind::Evaluate => print_stations(out, &doc, &graph, &evaluation.values),
+        CommandKind::Report => {
+            let opened = aircraft_engine::Engine::open(doc.clone());
+            let report = opened
+                .map_err(|errors| errors.into_iter().next().expect("non-empty"))
+                .and_then(|mut engine| {
+                    engine
+                        .report(&aircraft_engine::CancellationToken::default())
+                        .map_err(|error| match error {
+                            aircraft_engine::MeshJobError::Failed(diagnostics) => {
+                                diagnostics.into_iter().next().expect("non-empty")
+                            }
+                            other => {
+                                let _ = writeln!(out, "mesh job failed: {other:?}");
+                                aircraft_model::Diagnostic::error(
+                                    aircraft_model::Code::MeshFailure,
+                                    "mesh job failed",
+                                )
+                            }
+                        })
+                });
+            match report {
+                Ok(report) => print_report(out, &report),
+                Err(diagnostic) => {
+                    let _ = writeln!(out, "{diagnostic}");
+                    let _ = writeln!(out, "result: invalid");
+                    return EXIT_DIAGNOSTICS;
+                }
+            }
+        }
     }
     print_summary(out, &doc, &diagnostics);
     print_diagnostics(out, &diagnostics);
@@ -101,6 +141,76 @@ fn run_command(path: &Path, evaluate: bool, out: &mut String) -> i32 {
         EXIT_VALID
     } else {
         EXIT_DIAGNOSTICS
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CommandKind {
+    Validate,
+    Evaluate,
+    Report,
+}
+
+impl CommandKind {
+    fn description(self) -> &'static str {
+        match self {
+            CommandKind::Validate => "validation",
+            CommandKind::Evaluate => "evaluation",
+            CommandKind::Report => "report",
+        }
+    }
+}
+
+fn print_report(out: &mut String, report: &aircraft_engine::report::AircraftReport) {
+    for wing in &report.wings {
+        let planform = &wing.planform;
+        let _ = writeln!(out, "wing {} planform (half / full):", wing.wing_id);
+        let _ = writeln!(
+            out,
+            "  reference area: {:.4} / {:.4} m^2",
+            planform.reference_area.half, planform.reference_area.full
+        );
+        let _ = writeln!(
+            out,
+            "  span:           {:.4} / {:.4} m",
+            planform.span.half, planform.span.full
+        );
+        let _ = writeln!(
+            out,
+            "  MAC:            {:.4} m at x={:.4} z={:.4}",
+            planform.mac, planform.mac_le[0], planform.mac_le[2]
+        );
+        let _ = writeln!(out, "  aspect ratio:   {:.4}", planform.aspect_ratio);
+        if let Some(taper) = planform.taper_ratio {
+            let _ = writeln!(out, "  taper ratio:    {:.4}", taper);
+        }
+        for (panel, index) in planform.panels.iter().zip(1..) {
+            let deg = |radian: f64| radian * 180.0 / std::f64::consts::PI;
+            let _ = writeln!(
+                out,
+                "  panel {}: LE sweep {:7.3} deg, quarter-chord {:7.3} deg, TE {:7.3} deg, dihedral {:7.3} deg",
+                index,
+                deg(panel.leading_edge_sweep),
+                deg(panel.quarter_chord_sweep),
+                deg(panel.trailing_edge_sweep),
+                deg(panel.dihedral)
+            );
+        }
+        if let Some(volume) = &wing.volume {
+            let _ = writeln!(
+                out,
+                "  volume:         {:.5} / {:.5} m^3, wetted area {:.4} / {:.4} m^2",
+                volume.volume.half,
+                volume.volume.full,
+                volume.wetted_area.half,
+                volume.wetted_area.full
+            );
+        }
+        let _ = writeln!(
+            out,
+            "  interactive mesh: {} vertices, {} triangles",
+            wing.mesh_statistics.vertices, wing.mesh_statistics.triangles
+        );
     }
 }
 

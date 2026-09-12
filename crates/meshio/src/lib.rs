@@ -175,10 +175,10 @@ pub fn export_glb(mesh: &Mesh, name: &str) -> Vec<u8> {
     out.extend_from_slice(&(json_chunk_length as u32).to_le_bytes());
     out.extend_from_slice(&0x4E4F534Au32.to_le_bytes()); // "JSON"
     out.extend_from_slice(json_bytes);
-    out.extend(std::iter::repeat(b' ').take(json_pad));
+    out.extend(std::iter::repeat_n(b' ', json_pad));
     out.extend_from_slice(&(bin_chunk_length as u32).to_le_bytes());
     out.extend_from_slice(&0x004E4942u32.to_le_bytes()); // "BIN\0"
     out.extend_from_slice(&bin);
-    out.extend(std::iter::repeat(0u8).take(bin_pad));
+    out.extend(std::iter::repeat_n(0u8, bin_pad));
     out
 }

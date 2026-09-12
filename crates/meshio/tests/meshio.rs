@@ -109,7 +109,7 @@ fn glb_has_consistent_chunks_and_json() {
     let bin_offset = 20 + json_length + 8;
     assert_eq!(
         buffer_length as usize,
-        bytes.len() - bin_offset - 0,
+        bytes.len() - bin_offset,
         "buffer length covers the BIN chunk payload"
     );
 
