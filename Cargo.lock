@@ -32,6 +32,10 @@ version = "0.1.0"
 [[package]]
 name = "aircraft-expr"
 version = "0.1.0"
+dependencies = [
+ "aircraft-model",
+ "thiserror",
+]
 
 [[package]]
 name = "aircraft-graph"
