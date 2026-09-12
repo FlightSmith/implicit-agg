@@ -1,0 +1,14 @@
+[package]
+name = "aircraft-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aircraft"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true
