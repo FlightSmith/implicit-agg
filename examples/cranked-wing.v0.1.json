@@ -1,0 +1,125 @@
+{
+  "schema": "aircraft-definition/v0.1",
+  "id": "cranked-wing-study-001",
+  "name": "Cranked wing baseline",
+  "units": {
+    "length": "m",
+    "angle": "deg",
+    "mass": "kg",
+    "force": "N",
+    "pressure": "Pa"
+  },
+  "unitSystemLocked": true,
+  "coordinateSystem": {
+    "axes": {
+      "x": "aft",
+      "y": "starboard",
+      "z": "up"
+    },
+    "origin": {
+      "kind": "named-datum",
+      "name": "root-leading-edge"
+    }
+  },
+  "parameters": {
+    "wing.rootChord": 2.1,
+    "wing.kinkChord": 1.15,
+    "wing.tipChord": 0.42,
+    "wing.rootTwist": 1.5,
+    "wing.kinkTwist": -1.0,
+    "wing.tipTwist": -4.0,
+    "wing.rootToKink.dx": 0.8,
+    "wing.rootToKink.outboard": 3.2,
+    "wing.rootToKink.dz": 0.1,
+    "wing.kinkToTip.dx": 1.4,
+    "wing.kinkToTip.outboard": 4.1,
+    "wing.kinkToTip.dz": 0.35,
+    "wing.rootTrailingEdgeThickness": 0.008,
+    "wing.tipTrailingEdgeRatio": 0.006
+  },
+  "airfoils": {
+    "root": {
+      "kind": "naca4",
+      "code": "2412"
+    },
+    "kink": {
+      "kind": "naca4",
+      "code": "1410"
+    },
+    "tip": {
+      "kind": "naca4",
+      "code": "0008"
+    }
+  },
+  "components": [
+    {
+      "kind": "wing",
+      "id": "main-wing",
+      "role": "main",
+      "frame": {
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "axes": "inherit-aircraft"
+      },
+      "symmetry": {
+        "enabled": true,
+        "plane": "local-xz",
+        "sourceSide": "negative-local-y",
+        "centerlineTreatment": "weld"
+      },
+      "stations": [
+        {
+          "id": "root",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "chord": { "$param": "wing.rootChord" },
+          "twist": { "$param": "wing.rootTwist" },
+          "airfoil": "root",
+          "trailingEdge": {
+            "mode": "absolute",
+            "thickness": { "$param": "wing.rootTrailingEdgeThickness" }
+          }
+        },
+        {
+          "id": "kink",
+          "position": {
+            "x": "= @station.root.position.x + @param.wing.rootToKink.dx",
+            "y": "= @station.root.position.y - @param.wing.rootToKink.outboard",
+            "z": "= @station.root.position.z + @param.wing.rootToKink.dz"
+          },
+          "chord": { "$param": "wing.kinkChord" },
+          "twist": { "$param": "wing.kinkTwist" },
+          "airfoil": "kink",
+          "trailingEdge": { "mode": "sharp" }
+        },
+        {
+          "id": "tip",
+          "position": {
+            "x": "= @station.kink.position.x + @param.wing.kinkToTip.dx",
+            "y": "= @station.kink.position.y - @param.wing.kinkToTip.outboard",
+            "z": "= @station.kink.position.z + @param.wing.kinkToTip.dz"
+          },
+          "chord": { "$param": "wing.tipChord" },
+          "twist": { "$param": "wing.tipTwist" },
+          "airfoil": "tip",
+          "trailingEdge": {
+            "mode": "chordFraction",
+            "value": { "$param": "wing.tipTrailingEdgeRatio" }
+          }
+        }
+      ],
+      "interfaces": {
+        "root-attachment": {
+          "kind": "station-plane",
+          "station": "root"
+        }
+      }
+    }
+  ]
+}

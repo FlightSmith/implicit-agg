@@ -1,0 +1,14 @@
+{
+  "schema": "aircraft-presentation/v0.1",
+  "aircraftId": "cranked-wing-study-001",
+  "controlOverrides": {
+    "main-wing/root/twist": {
+      "widget": "adaptive-number",
+      "range": {
+        "min": -8,
+        "max": 8,
+        "step": 0.25
+      }
+    }
+  }
+}

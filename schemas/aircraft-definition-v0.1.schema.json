@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aircraft-design.local/schemas/aircraft-definition-v0.1.schema.json",
+  "title": "Aircraft Definition v0.1",
+  "description": "Canonical source definition for one parametric aircraft study. All dimensional values use document-global units.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "name",
+    "units",
+    "unitSystemLocked",
+    "coordinateSystem",
+    "parameters",
+    "airfoils",
+    "components"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aircraft-definition/v0.1"
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "$ref": "#/$defs/units"
+    },
+    "unitSystemLocked": {
+      "const": true,
+      "description": "The application does not permit in-place conversion of a document unit system."
+    },
+    "coordinateSystem": {
+      "$ref": "#/$defs/coordinateSystem"
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Raw scalars. Semantic validation infers dimensions from typed consuming fields.",
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9._-]*$"
+      },
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "airfoils": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/airfoil"
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/wing"
+      }
+    },
+    "analysisCases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/analysisCase"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["length", "angle", "mass", "force", "pressure"],
+      "properties": {
+        "length": { "enum": ["m", "mm", "ft", "in"] },
+        "angle": { "enum": ["deg", "rad"] },
+        "mass": { "enum": ["kg", "lbm"] },
+        "force": { "enum": ["N", "lbf"] },
+        "pressure": { "enum": ["Pa", "kPa", "psi"] }
+      }
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axes", "origin"],
+      "properties": {
+        "axes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "const": "aft" },
+            "y": { "const": "starboard" },
+            "z": { "const": "up" }
+          }
+        },
+        "origin": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "enum": ["named-datum", "user-selected"] },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "typedValue": {
+      "description": "A literal, parameter reference, or typed expression. Field location provides the expected dimension.",
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["$param"],
+          "properties": {
+            "$param": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9._-]*$"
+            }
+          }
+        },
+        {
+          "type": "string",
+          "pattern": "^=\\s*.+"
+        }
+      ]
+    },
+    "airfoil": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "code"],
+          "properties": {
+            "kind": { "const": "naca4" },
+            "code": { "type": "string", "pattern": "^[0-9]{4}$" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "points"],
+          "properties": {
+            "kind": { "const": "coordinates" },
+            "points": {
+              "type": "array",
+              "minItems": 3,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": { "type": "number" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/typedValue" },
+        "y": { "$ref": "#/$defs/typedValue" },
+        "z": { "$ref": "#/$defs/typedValue" }
+      }
+    },
+    "trailingEdge": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "sharp" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "thickness"],
+          "properties": {
+            "mode": { "const": "absolute" },
+            "thickness": { "$ref": "#/$defs/typedValue" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "value"],
+          "properties": {
+            "mode": { "const": "chordFraction" },
+            "value": { "$ref": "#/$defs/typedValue" }
+          }
+        }
+      ]
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "position", "chord", "twist", "airfoil"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "position": { "$ref": "#/$defs/position" },
+        "chord": { "$ref": "#/$defs/typedValue" },
+        "twist": { "$ref": "#/$defs/typedValue" },
+        "airfoil": { "$ref": "#/$defs/id" },
+        "trailingEdge": { "$ref": "#/$defs/trailingEdge" }
+      }
+    },
+    "symmetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "plane", "sourceSide", "centerlineTreatment"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "plane": { "const": "local-xz" },
+        "sourceSide": { "const": "negative-local-y" },
+        "centerlineTreatment": { "enum": ["weld", "open"] }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "description": "Component-local frame relative to the aircraft coordinate system. Wing station values are expressed in this frame.",
+      "additionalProperties": false,
+      "required": ["origin", "axes"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/position" },
+        "axes": { "const": "inherit-aircraft" }
+      }
+    },
+    "stationPlaneInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "station"],
+      "properties": {
+        "kind": { "const": "station-plane" },
+        "station": { "$ref": "#/$defs/id" }
+      }
+    },
+    "wing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "role", "frame", "symmetry", "stations"],
+      "properties": {
+        "kind": { "const": "wing" },
+        "id": { "$ref": "#/$defs/id" },
+        "role": { "enum": ["main", "canard", "tail", "fin", "other"] },
+        "frame": { "$ref": "#/$defs/frame" },
+        "symmetry": { "$ref": "#/$defs/symmetry" },
+        "stations": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/station" }
+        },
+        "interfaces": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/stationPlaneInterface" }
+        }
+      }
+    },
+    "analysisCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mach"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "mach": { "type": "number" },
+        "altitude": { "$ref": "#/$defs/typedValue" }
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "schema": "component-catalog/v0.1",
+  "componentKind": "wing",
+  "purpose": "Field dimensions, editor behavior, and adaptive control policies. This catalog is not aircraft source data.",
+  "fields": {
+    "stations[].position.x": {
+      "dimension": "length",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+    },
+    "stations[].position.y": {
+      "dimension": "length",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+    },
+    "stations[].position.z": {
+      "dimension": "length",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+    },
+    "stations[].chord": {
+      "dimension": "length",
+      "constraint": "strictlyPositive",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" }
+    },
+    "stations[].twist": {
+      "dimension": "angle",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "angleAroundCurrent", "expand": "onBoundary" }
+    },
+    "stations[].trailingEdge.thickness": {
+      "dimension": "length",
+      "constraint": "nonNegativeAndProfileFeasible",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" }
+    },
+    "stations[].trailingEdge.value": {
+      "dimension": "ratio",
+      "constraint": "nonNegativeAndProfileFeasible",
+      "editor": "adaptive-number",
+      "rangePolicy": { "kind": "ratioAroundCurrent", "expand": "onBoundary" }
+    }
+  },
+  "semanticRules": [
+    "symmetricRootOnLocalXZ",
+    "sourceStationsProgressIntoNegativeLocalY",
+    "positiveChord",
+    "uniqueStationIds",
+    "profileExists",
+    "noExpressionCycles"
+  ]
+}
