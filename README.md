@@ -44,3 +44,23 @@ The source definition has one global, immutable unit system. It stores design in
 - Exact copies of any nTop UI, file format, proprietary algorithm, or brand asset.
 
 Those capabilities have explicit extension points so the future buried-engine / top- or side-intake aircraft workflow does not require a data-model rewrite. Version 4 adds robust Boolean operations on arbitrary imported solids.
+
+## Implementation status
+
+Milestone 0 (foundation core) is implemented as a Rust workspace:
+
+- `crates/aircraft-model` — typed v0.1 document model, JSON Schema validation, semantic checks.
+- `crates/aircraft-expr` — the typed dimensional expression language (parser, checker, evaluator).
+- `crates/aircraft-graph` — the dependency graph: reference resolution, parameter dimension inference, cycle detection, deterministic evaluation, physical predicates.
+- `apps/cli` — headless `validate` and `evaluate` commands; the fixture harness under `examples/fixtures/`.
+
+Milestone 1 (parametric half wing: profiles, loft, meshing, metrics) comes next; see the [implementation plan](docs/10-implementation-plan.md).
+
+### Building and testing
+
+```sh
+cargo test --workspace                 # unit, integration, and fixture tests
+cargo clippy --workspace --all-targets # lint gate (CI runs this with -D warnings)
+cargo run -p aircraft-cli -- validate examples/cranked-wing.v0.1.json
+cargo run -p aircraft-cli -- evaluate examples/cranked-wing.v0.1.json
+```
