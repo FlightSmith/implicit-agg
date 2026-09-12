@@ -39,9 +39,12 @@ pub fn validate(doc: &AircraftDefinition) -> Vec<Diagnostic> {
         let id = component.id();
         if component_ids.contains(&id) {
             diagnostics.push(
-                Diagnostic::error(Code::DuplicateIdentifier, format!("duplicate component id {id:?}"))
-                    .with_path(format!("components/{component_index}"))
-                    .with_subject(format!("component {id}")),
+                Diagnostic::error(
+                    Code::DuplicateIdentifier,
+                    format!("duplicate component id {id:?}"),
+                )
+                .with_path(format!("components/{component_index}"))
+                .with_subject(format!("component {id}")),
             );
         }
         component_ids.push(id);
@@ -69,7 +72,10 @@ fn validate_wing(
             diagnostics.push(
                 Diagnostic::error(
                     Code::DuplicateIdentifier,
-                    format!("duplicate station id {:?} in wing {:?}", station.id, wing.id),
+                    format!(
+                        "duplicate station id {:?} in wing {:?}",
+                        station.id, wing.id
+                    ),
                 )
                 .with_path(format!("{path}/id"))
                 .with_subject(subject.clone()),

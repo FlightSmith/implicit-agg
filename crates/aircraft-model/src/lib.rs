@@ -9,7 +9,7 @@ pub mod typed_value;
 pub mod units;
 
 pub use aircraft::{
-    Airfoil, AircraftDefinition, AnalysisCase, Axis, Axes, CenterlineTreatment, Component,
+    AircraftDefinition, Airfoil, AnalysisCase, Axes, Axis, CenterlineTreatment, Component,
     CoordinateOrigin, CoordinateSystem, Frame, FrameAxes, Interface, OriginKind, Position,
     SourceSide, Station, Symmetry, SymmetryPlane, TrailingEdge, Wing, WingRole, SCHEMA_ID,
 };

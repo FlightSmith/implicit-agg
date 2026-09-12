@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use aircraft_model::parse_document;
 
 const EXAMPLE: &str = include_str!("../../../examples/cranked-wing.v0.1.json");
@@ -32,7 +34,9 @@ fn inline_units_are_rejected() {
     let source = serde_json::to_string(&value).unwrap();
     let errors = parse_document(&source).expect_err("inline unit must be rejected");
     assert!(
-        errors.iter().any(|d| d.code == aircraft_model::Code::SchemaViolation),
+        errors
+            .iter()
+            .any(|d| d.code == aircraft_model::Code::SchemaViolation),
         "expected a schema violation, got: {errors:?}"
     );
 }
@@ -45,8 +49,7 @@ fn missing_required_field_is_rejected_with_a_path() {
     let errors = parse_document(&source).expect_err("missing units must be rejected");
     assert!(errors
         .iter()
-        .any(|d| d.code == aircraft_model::Code::SchemaViolation
-            && d.path.as_deref() == Some("")));
+        .any(|d| d.code == aircraft_model::Code::SchemaViolation && d.path.as_deref() == Some("")));
 }
 
 #[test]

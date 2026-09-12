@@ -50,10 +50,10 @@ pub fn evaluate(expr: &TExpr, ctx: &EvalContext<'_>) -> Result<Value, EvalError>
 
 fn walk(expr: &TExpr, ctx: &EvalContext<'_>) -> Result<Value, EvalError> {
     match expr {
-        TExpr::Literal(value, dim) => Ok(Value::Number(literal_in_canonical(*value, *dim, ctx.units))),
-        TExpr::Reference(reference, _) => {
-            Ok(Value::Number(ctx.refs.value_of(reference)?))
+        TExpr::Literal(value, dim) => {
+            Ok(Value::Number(literal_in_canonical(*value, *dim, ctx.units)))
         }
+        TExpr::Reference(reference, _) => Ok(Value::Number(ctx.refs.value_of(reference)?)),
         TExpr::Negate(_, operand) => match walk(operand, ctx)? {
             Value::Number(number) => Ok(Value::Number(-number)),
             Value::Bool(_) => Err(EvalError::Domain("negate expects a number".to_string())),
@@ -99,7 +99,10 @@ fn call(function: Function, args: &[TExpr], ctx: &EvalContext<'_>) -> Result<Val
     };
     let value = match function {
         Function::Min => numbers(args)?.iter().copied().fold(f64::INFINITY, f64::min),
-        Function::Max => numbers(args)?.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        Function::Max => numbers(args)?
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max),
         Function::Abs => numbers(args)?[0].abs(),
         Function::Clamp => {
             let values = numbers(args)?;
@@ -135,7 +138,9 @@ fn call(function: Function, args: &[TExpr], ctx: &EvalContext<'_>) -> Result<Val
 fn expect_number(value: Value) -> Result<f64, EvalError> {
     match value {
         Value::Number(number) => Ok(number),
-        Value::Bool(_) => Err(EvalError::Domain("expected a number, got a boolean".to_string())),
+        Value::Bool(_) => Err(EvalError::Domain(
+            "expected a number, got a boolean".to_string(),
+        )),
     }
 }
 

@@ -141,7 +141,10 @@ impl std::fmt::Display for Ref {
                     Coordinate::Y => "y",
                     Coordinate::Z => "z",
                 };
-                write!(f, "@component.{component}.interface.{interface}.origin.{coordinate}")
+                write!(
+                    f,
+                    "@component.{component}.interface.{interface}.origin.{coordinate}"
+                )
             }
         }
     }
@@ -170,11 +173,7 @@ pub fn print(expr: &Expr) -> String {
             format!("({} {} {})", print(lhs), cmp_symbol(*op), print(rhs))
         }
         Expr::Call(function, args) => {
-            let args = args
-                .iter()
-                .map(print)
-                .collect::<Vec<_>>()
-                .join(", ");
+            let args = args.iter().map(print).collect::<Vec<_>>().join(", ");
             format!("{}({})", function.name(), args)
         }
     }

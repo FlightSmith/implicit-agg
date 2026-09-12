@@ -58,13 +58,34 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
         }
 
         match c {
-            '+' => tokens.push(Spanned { token: Token::Plus, offset }),
-            '-' => tokens.push(Spanned { token: Token::Minus, offset }),
-            '*' => tokens.push(Spanned { token: Token::Star, offset }),
-            '/' => tokens.push(Spanned { token: Token::Slash, offset }),
-            '(' => tokens.push(Spanned { token: Token::LeftParen, offset }),
-            ')' => tokens.push(Spanned { token: Token::RightParen, offset }),
-            ',' => tokens.push(Spanned { token: Token::Comma, offset }),
+            '+' => tokens.push(Spanned {
+                token: Token::Plus,
+                offset,
+            }),
+            '-' => tokens.push(Spanned {
+                token: Token::Minus,
+                offset,
+            }),
+            '*' => tokens.push(Spanned {
+                token: Token::Star,
+                offset,
+            }),
+            '/' => tokens.push(Spanned {
+                token: Token::Slash,
+                offset,
+            }),
+            '(' => tokens.push(Spanned {
+                token: Token::LeftParen,
+                offset,
+            }),
+            ')' => tokens.push(Spanned {
+                token: Token::RightParen,
+                offset,
+            }),
+            ',' => tokens.push(Spanned {
+                token: Token::Comma,
+                offset,
+            }),
             '@' => {
                 let start = index + 1;
                 let mut end = start;
@@ -74,7 +95,8 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
                 if end == start {
                     return Err(LexError {
                         offset,
-                        message: "a reference must name a parameter, station, or component".to_string(),
+                        message: "a reference must name a parameter, station, or component"
+                            .to_string(),
                     });
                 }
                 let text: String = chars[start..end].iter().map(|(_, c)| c).collect();
@@ -120,7 +142,8 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
             }
             _ if is_ident_start(c) => {
                 let mut end = index;
-                while end < chars.len() && (chars[end].1.is_ascii_alphanumeric() || chars[end].1 == '_')
+                while end < chars.len()
+                    && (chars[end].1.is_ascii_alphanumeric() || chars[end].1 == '_')
                 {
                     end += 1;
                 }
@@ -134,7 +157,10 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
             }
             '=' => {
                 if index + 1 < chars.len() && chars[index + 1].1 == '=' {
-                    tokens.push(Spanned { token: Token::Equal, offset });
+                    tokens.push(Spanned {
+                        token: Token::Equal,
+                        offset,
+                    });
                     index += 2;
                     continue;
                 }
@@ -145,7 +171,10 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
             }
             '!' => {
                 if index + 1 < chars.len() && chars[index + 1].1 == '=' {
-                    tokens.push(Spanned { token: Token::NotEqual, offset });
+                    tokens.push(Spanned {
+                        token: Token::NotEqual,
+                        offset,
+                    });
                     index += 2;
                     continue;
                 }
@@ -156,19 +185,31 @@ pub fn lex(source: &str) -> Result<Vec<Spanned>, LexError> {
             }
             '<' => {
                 if index + 1 < chars.len() && chars[index + 1].1 == '=' {
-                    tokens.push(Spanned { token: Token::LessEqual, offset });
+                    tokens.push(Spanned {
+                        token: Token::LessEqual,
+                        offset,
+                    });
                     index += 2;
                     continue;
                 }
-                tokens.push(Spanned { token: Token::Less, offset });
+                tokens.push(Spanned {
+                    token: Token::Less,
+                    offset,
+                });
             }
             '>' => {
                 if index + 1 < chars.len() && chars[index + 1].1 == '=' {
-                    tokens.push(Spanned { token: Token::GreaterEqual, offset });
+                    tokens.push(Spanned {
+                        token: Token::GreaterEqual,
+                        offset,
+                    });
                     index += 2;
                     continue;
                 }
-                tokens.push(Spanned { token: Token::Greater, offset });
+                tokens.push(Spanned {
+                    token: Token::Greater,
+                    offset,
+                });
             }
             _ => {
                 return Err(LexError {

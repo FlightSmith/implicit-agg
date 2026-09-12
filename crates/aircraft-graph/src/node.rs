@@ -46,7 +46,9 @@ impl FieldKind {
 
 #[derive(Debug, Clone)]
 pub enum NodeKind {
-    Parameter { id: String },
+    Parameter {
+        id: String,
+    },
     StationField {
         component_index: usize,
         station_index: usize,

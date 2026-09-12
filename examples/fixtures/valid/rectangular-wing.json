@@ -1,0 +1,85 @@
+{
+  "schema": "aircraft-definition/v0.1",
+  "id": "rect-wing-fixture-001",
+  "name": "Rectangular wing fixture",
+  "units": {
+    "length": "m",
+    "angle": "deg",
+    "mass": "kg",
+    "force": "N",
+    "pressure": "Pa"
+  },
+  "unitSystemLocked": true,
+  "coordinateSystem": {
+    "axes": {
+      "x": "aft",
+      "y": "starboard",
+      "z": "up"
+    },
+    "origin": {
+      "kind": "named-datum",
+      "name": "root-leading-edge"
+    }
+  },
+  "parameters": {
+    "rect.chord": 1.5,
+    "rect.semispan": 2.0
+  },
+  "airfoils": {
+    "symmetric": {
+      "kind": "naca4",
+      "code": "0012"
+    }
+  },
+  "components": [
+    {
+      "kind": "wing",
+      "id": "rect-wing",
+      "role": "main",
+      "frame": {
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "axes": "inherit-aircraft"
+      },
+      "symmetry": {
+        "enabled": true,
+        "plane": "local-xz",
+        "sourceSide": "negative-local-y",
+        "centerlineTreatment": "weld"
+      },
+      "stations": [
+        {
+          "id": "root",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "chord": { "$param": "rect.chord" },
+          "twist": 0,
+          "airfoil": "symmetric"
+        },
+        {
+          "id": "tip",
+          "position": {
+            "x": 0,
+            "y": "= -@param.rect.semispan",
+            "z": 0
+          },
+          "chord": { "$param": "rect.chord" },
+          "twist": 0,
+          "airfoil": "symmetric"
+        }
+      ],
+      "interfaces": {
+        "root-attachment": {
+          "kind": "station-plane",
+          "station": "root"
+        }
+      }
+    }
+  ]
+}

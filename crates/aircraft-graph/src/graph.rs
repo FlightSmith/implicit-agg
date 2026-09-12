@@ -18,6 +18,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub use aircraft_expr::Value;
 
+/// Per parameter: the dimensions demanded by each consuming field, with the
+/// consumer's subject for conflict diagnostics.
+type ParameterConstraints = HashMap<String, Vec<(Dimension, String)>>;
+
 /// A built graph. Construct with [`build`].
 #[derive(Debug, Clone)]
 pub struct Graph {
@@ -92,7 +96,9 @@ impl Graph {
     ) -> Option<NodeId> {
         let stations = self.component_stations.get(&component_index)?;
         let station_id = stations.get(station_index)?;
-        let nodes = self.station_nodes.get(&(component_index, station_id.clone()))?;
+        let nodes = self
+            .station_nodes
+            .get(&(component_index, station_id.clone()))?;
         match field {
             FieldKind::PositionX => Some(nodes.position[0]),
             FieldKind::PositionY => Some(nodes.position[1]),
@@ -186,7 +192,13 @@ fn compute_node(
         if value.is_finite() {
             state.values[node] = value;
         } else {
-            push_error(state, node, node_data, Code::NonFiniteResult, "value is not finite");
+            push_error(
+                state,
+                node,
+                node_data,
+                Code::NonFiniteResult,
+                "value is not finite",
+            );
         }
         return;
     }
@@ -245,13 +257,25 @@ fn compute_node(
             }
         }
         ValueSource::Unresolved(_) => {
-            push_error(state, node, node_data, Code::Internal, "expression was never resolved");
+            push_error(
+                state,
+                node,
+                node_data,
+                Code::Internal,
+                "expression was never resolved",
+            );
             return;
         }
     };
 
     if !value.is_finite() {
-        push_error(state, node, node_data, Code::NonFiniteResult, "value is not finite");
+        push_error(
+            state,
+            node,
+            node_data,
+            Code::NonFiniteResult,
+            "value is not finite",
+        );
         return;
     }
     state.values[node] = value;
@@ -355,7 +379,11 @@ impl<'a> Builder<'a> {
     }
 
     fn create_frame_origin_nodes(&mut self, component_index: usize, wing: &Wing) {
-        for (axis, coordinate) in [("x", Coordinate::X), ("y", Coordinate::Y), ("z", Coordinate::Z)] {
+        for (axis, coordinate) in [
+            ("x", Coordinate::X),
+            ("y", Coordinate::Y),
+            ("z", Coordinate::Z),
+        ] {
             let typed = match coordinate {
                 Coordinate::X => &wing.frame.origin.x,
                 Coordinate::Y => &wing.frame.origin.y,
@@ -387,10 +415,13 @@ impl<'a> Builder<'a> {
         let subject = format!("{wing_id} / station {}", station.id);
 
         let mut position = [0usize; 3];
-        for (axis_index, (axis, coordinate)) in
-            [("x", Coordinate::X), ("y", Coordinate::Y), ("z", Coordinate::Z)]
-                .into_iter()
-                .enumerate()
+        for (axis_index, (axis, coordinate)) in [
+            ("x", Coordinate::X),
+            ("y", Coordinate::Y),
+            ("z", Coordinate::Z),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let typed = match coordinate {
                 Coordinate::X => &station.position.x,
@@ -598,10 +629,8 @@ impl<'a> Builder<'a> {
 
     /// Second pass: check every expression now that all nodes exist, wire
     /// dependency edges, and collect per-parameter dimension constraints.
-    fn resolve_dependencies(
-        &mut self,
-    ) -> Result<HashMap<String, Vec<(Dimension, String)>>, Vec<Diagnostic>> {
-        let mut constraints: HashMap<String, Vec<(Dimension, String)>> = HashMap::new();
+    fn resolve_dependencies(&mut self) -> Result<ParameterConstraints, Vec<Diagnostic>> {
+        let mut constraints: ParameterConstraints = HashMap::new();
 
         for index in 0..self.nodes.len() {
             enum Pending {
@@ -622,7 +651,10 @@ impl<'a> Builder<'a> {
                         let expected = self.nodes[index].expected_dimension();
                         let subject = self.nodes[index].subject.clone();
                         self.nodes[index].deps.push(param);
-                        constraints.entry(id.clone()).or_default().push((expected, subject));
+                        constraints
+                            .entry(id.clone())
+                            .or_default()
+                            .push((expected, subject));
                         handled = true;
                     }
                     if !handled {
@@ -703,7 +735,7 @@ impl<'a> Builder<'a> {
     /// parameters become diagnostics.
     fn infer_parameter_dimensions(
         &mut self,
-        constraints: HashMap<String, Vec<(Dimension, String)>>,
+        constraints: ParameterConstraints,
     ) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
         let mut warnings = Vec::new();
 
@@ -849,4 +881,3 @@ impl RefResolver for GraphResolver<'_, '_> {
         }
     }
 }
-

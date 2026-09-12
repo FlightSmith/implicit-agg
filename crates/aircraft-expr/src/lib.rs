@@ -20,6 +20,7 @@ pub use eval::{evaluate, EvalContext, EvalError, RefValues, Value};
 pub use parser::{parse_field_expression, parse_formula};
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -29,11 +30,18 @@ mod tests {
 
     #[test]
     fn numbers_and_operators_parse() {
-        assert_eq!(formula("1 + 2 * 3"), Expr::Binary(
-            BinOp::Add,
-            Box::new(Expr::Literal(1.0)),
-            Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::Literal(2.0)), Box::new(Expr::Literal(3.0)))),
-        ));
+        assert_eq!(
+            formula("1 + 2 * 3"),
+            Expr::Binary(
+                BinOp::Add,
+                Box::new(Expr::Literal(1.0)),
+                Box::new(Expr::Binary(
+                    BinOp::Mul,
+                    Box::new(Expr::Literal(2.0)),
+                    Box::new(Expr::Literal(3.0))
+                )),
+            )
+        );
     }
 
     #[test]

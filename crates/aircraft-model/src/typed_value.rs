@@ -22,9 +22,7 @@ impl TypedValue {
     }
 
     pub fn param(id: impl Into<String>) -> Self {
-        TypedValue::ParamRef {
-            param: id.into(),
-        }
+        TypedValue::ParamRef { param: id.into() }
     }
 
     /// Build an expression value from formula source without the leading `=`.

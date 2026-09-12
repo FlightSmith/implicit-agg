@@ -1,8 +1,6 @@
 //! Recursive-descent parser for the expression grammar.
 
-use crate::ast::{
-    BinOp, CmpOp, Coordinate, Expr, Function, Ref, StationLeaf,
-};
+use crate::ast::{BinOp, CmpOp, Coordinate, Expr, Function, Ref, StationLeaf};
 use crate::lexer::{lex, Spanned, Token};
 use aircraft_model::{Code, Diagnostic};
 
@@ -18,9 +16,7 @@ pub fn parse_field_expression(source: &str) -> Result<Expr, Diagnostic> {
 
 /// Parse an already-stripped formula body.
 pub fn parse_formula(formula: &str) -> Result<Expr, Diagnostic> {
-    let tokens = lex(formula).map_err(|error| {
-        syntax(&error.message, error.offset)
-    })?;
+    let tokens = lex(formula).map_err(|error| syntax(&error.message, error.offset))?;
     if tokens.is_empty() {
         return Err(syntax("an expression must not be empty", 0));
     }
@@ -33,7 +29,10 @@ pub fn parse_formula(formula: &str) -> Result<Expr, Diagnostic> {
     let expr = parser.comparison()?;
     if let Some(next) = parser.peek() {
         return Err(syntax(
-            &format!("unexpected trailing input starting with {}", describe(&next.token)),
+            &format!(
+                "unexpected trailing input starting with {}",
+                describe(&next.token)
+            ),
             next.offset,
         ));
     }
@@ -94,7 +93,10 @@ impl Parser {
                 &format!("expected {what}, found {}", describe(&spanned.token)),
                 spanned.offset,
             )),
-            None => Err(syntax(&format!("expected {what}, found end of expression"), 0)),
+            None => Err(syntax(
+                &format!("expected {what}, found end of expression"),
+                0,
+            )),
         }
     }
 
@@ -169,9 +171,8 @@ impl Parser {
             }
             Token::Ident(name) => {
                 self.advance();
-                let function = Function::from_name(&name).ok_or_else(|| {
-                    syntax(&format!("unknown function '{name}'"), spanned.offset)
-                })?;
+                let function = Function::from_name(&name)
+                    .ok_or_else(|| syntax(&format!("unknown function '{name}'"), spanned.offset))?;
                 self.expect(Token::LeftParen, "'(' after a function name")?;
                 let mut args = Vec::new();
                 if !matches!(self.peek().map(|s| &s.token), Some(Token::RightParen)) {

@@ -1,9 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use aircraft_graph::{
-    build, check_predicates, evaluate_graph, evaluate_incremental, FieldKind,
-};
-use aircraft_model::aircraft::{Component, Station, Wing};
+use aircraft_graph::{build, check_predicates, evaluate_graph, evaluate_incremental, FieldKind};
+use aircraft_model::aircraft::{Component, Wing};
 use aircraft_model::{parse_document, Code, Severity, TypedValue};
 
 const EXAMPLE: &str = include_str!("../../../examples/cranked-wing.v0.1.json");
@@ -32,11 +30,21 @@ fn example_builds_and_evaluates_the_documented_cascade() {
     );
 
     // Kink = root + (0.8, -3.2, 0.1); tip = kink + (1.4, -4.1, 0.35).
-    let kink_x = graph.station_field_node(0, 1, FieldKind::PositionX).unwrap();
-    let kink_y = graph.station_field_node(0, 1, FieldKind::PositionY).unwrap();
-    let tip_x = graph.station_field_node(0, 2, FieldKind::PositionX).unwrap();
-    let tip_y = graph.station_field_node(0, 2, FieldKind::PositionY).unwrap();
-    let tip_z = graph.station_field_node(0, 2, FieldKind::PositionZ).unwrap();
+    let kink_x = graph
+        .station_field_node(0, 1, FieldKind::PositionX)
+        .unwrap();
+    let kink_y = graph
+        .station_field_node(0, 1, FieldKind::PositionY)
+        .unwrap();
+    let tip_x = graph
+        .station_field_node(0, 2, FieldKind::PositionX)
+        .unwrap();
+    let tip_y = graph
+        .station_field_node(0, 2, FieldKind::PositionY)
+        .unwrap();
+    let tip_z = graph
+        .station_field_node(0, 2, FieldKind::PositionZ)
+        .unwrap();
     assert!((evaluation.values[kink_x] - 0.8).abs() < 1e-12);
     assert!((evaluation.values[kink_y] + 3.2).abs() < 1e-12);
     assert!((evaluation.values[tip_x] - 2.2).abs() < 1e-12);
@@ -72,16 +80,24 @@ fn editing_a_parameter_recomputes_exactly_its_descendants() {
     let full = evaluate_graph(&graph, &edited);
 
     assert_eq!(incremental.values, full.values);
-    let kink_x = graph.station_field_node(0, 1, FieldKind::PositionX).unwrap();
-    let kink_y = graph.station_field_node(0, 1, FieldKind::PositionY).unwrap();
+    let kink_x = graph
+        .station_field_node(0, 1, FieldKind::PositionX)
+        .unwrap();
+    let kink_y = graph
+        .station_field_node(0, 1, FieldKind::PositionY)
+        .unwrap();
     assert!((incremental.values[kink_x] - 1.3).abs() < 1e-12);
     assert!((incremental.values[kink_y] + 3.2).abs() < 1e-12);
 
     // The affected set is exactly the parameter, kink x, and tip x: the y and
     // z cascades hang off other parameters.
     let affected = graph.descendants(&[seed]);
-    let kink_x = graph.station_field_node(0, 1, FieldKind::PositionX).unwrap();
-    let tip_x = graph.station_field_node(0, 2, FieldKind::PositionX).unwrap();
+    let kink_x = graph
+        .station_field_node(0, 1, FieldKind::PositionX)
+        .unwrap();
+    let tip_x = graph
+        .station_field_node(0, 2, FieldKind::PositionX)
+        .unwrap();
     let expected: std::collections::BTreeSet<_> = [seed, kink_x, tip_x].into_iter().collect();
     assert_eq!(affected, expected);
 }
@@ -134,12 +150,13 @@ fn an_angle_parameter_cannot_feed_a_length_field() {
 fn interface_origins_resolve_to_station_values() {
     let mut doc = example();
     let wing = wing_mut(&mut doc);
-    wing.stations[1].position.x = TypedValue::expression(
-        "@component.main-wing.interface.root-attachment.origin.x + 0.5",
-    );
+    wing.stations[1].position.x =
+        TypedValue::expression("@component.main-wing.interface.root-attachment.origin.x + 0.5");
     let (graph, _) = build(&doc).unwrap();
     let evaluation = evaluate_graph(&graph, &doc);
-    let kink_x = graph.station_field_node(0, 1, FieldKind::PositionX).unwrap();
+    let kink_x = graph
+        .station_field_node(0, 1, FieldKind::PositionX)
+        .unwrap();
     assert!((evaluation.values[kink_x] - 0.5).abs() < 1e-12);
 }
 
@@ -207,8 +224,9 @@ fn unreferenced_parameters_are_warnings() {
     let mut doc = example();
     doc.parameters.insert("unused.things".to_string(), 5.0);
     let (_, warnings) = build(&doc).unwrap();
-    assert!(warnings.iter().any(|d| d.severity == Severity::Warning
-        && d.message.contains("unused.things")));
+    assert!(warnings
+        .iter()
+        .any(|d| d.severity == Severity::Warning && d.message.contains("unused.things")));
 }
 
 #[test]
@@ -244,7 +262,9 @@ fn trailing_edge_values_become_nodes() {
 fn station_subject_and_path_are_traceable() {
     let doc = example();
     let (graph, _) = build(&doc).unwrap();
-    let kink_x = graph.station_field_node(0, 1, FieldKind::PositionX).unwrap();
+    let kink_x = graph
+        .station_field_node(0, 1, FieldKind::PositionX)
+        .unwrap();
     let node = &graph.nodes[kink_x];
     assert_eq!(node.path, "components/0/stations/1/position/x");
     assert_eq!(node.subject, "main-wing / station kink / position x");

@@ -25,7 +25,11 @@ pub struct AircraftDefinition {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub airfoils: BTreeMap<String, Airfoil>,
     pub components: Vec<Component>,
-    #[serde(rename = "analysisCases", default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "analysisCases",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub analysis_cases: Vec<AnalysisCase>,
 }
 
@@ -96,7 +100,11 @@ pub struct Station {
     pub chord: TypedValue,
     pub twist: TypedValue,
     pub airfoil: String,
-    #[serde(rename = "trailingEdge", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "trailingEdge",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub trailing_edge: Option<TrailingEdge>,
 }
 

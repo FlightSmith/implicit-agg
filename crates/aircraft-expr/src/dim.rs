@@ -16,23 +16,18 @@ pub struct Dimension {
 }
 
 impl Dimension {
-    pub const RATIO: Self = Self { length: 0, angle: 0 };
-    pub const LENGTH: Self = Self { length: 1, angle: 0 };
-    pub const ANGLE: Self = Self { length: 0, angle: 1 };
-
-    pub fn mul(self, other: Self) -> Self {
-        Dimension {
-            length: self.length + other.length,
-            angle: self.angle + other.angle,
-        }
-    }
-
-    pub fn div(self, other: Self) -> Self {
-        Dimension {
-            length: self.length - other.length,
-            angle: self.angle - other.angle,
-        }
-    }
+    pub const RATIO: Self = Self {
+        length: 0,
+        angle: 0,
+    };
+    pub const LENGTH: Self = Self {
+        length: 1,
+        angle: 0,
+    };
+    pub const ANGLE: Self = Self {
+        length: 0,
+        angle: 1,
+    };
 
     pub fn invert(self) -> Self {
         Dimension {
@@ -111,6 +106,28 @@ impl Dim {
             Dim::Any => "an unconstrained number".to_string(),
             Dim::Bool => "a boolean".to_string(),
             Dim::Of(dimension) => dimension.describe(),
+        }
+    }
+}
+
+impl std::ops::Mul for Dimension {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        Dimension {
+            length: self.length + rhs.length,
+            angle: self.angle + rhs.angle,
+        }
+    }
+}
+
+impl std::ops::Div for Dimension {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self {
+        Dimension {
+            length: self.length - rhs.length,
+            angle: self.angle - rhs.angle,
         }
     }
 }

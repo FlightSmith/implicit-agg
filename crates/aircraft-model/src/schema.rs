@@ -16,7 +16,8 @@ static VALIDATOR: OnceLock<Option<Compiled>> = OnceLock::new();
 fn validator() -> Option<&'static Compiled> {
     VALIDATOR
         .get_or_init(|| {
-            let schema: serde_json::Value = serde_json::from_str(AIRCRAFT_DEFINITION_SCHEMA).ok()?;
+            let schema: serde_json::Value =
+                serde_json::from_str(AIRCRAFT_DEFINITION_SCHEMA).ok()?;
             jsonschema::options().build(&schema).ok()
         })
         .as_ref()

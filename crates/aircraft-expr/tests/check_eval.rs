@@ -212,16 +212,24 @@ fn comparisons_produce_booleans_that_cannot_bind_to_numbers() {
     assert_eq!(checked.dim, Dim::Bool);
 
     let expr = parse_formula("1 < 2").unwrap();
-    let diagnostic = check(&expr, Dim::Of(Dimension::LENGTH), &mut FixedResolver::default())
-        .expect_err("boolean must not bind to a length field");
+    let diagnostic = check(
+        &expr,
+        Dim::Of(Dimension::LENGTH),
+        &mut FixedResolver::default(),
+    )
+    .expect_err("boolean must not bind to a length field");
     assert_eq!(diagnostic.code, Code::DimensionMismatch);
 }
 
 #[test]
 fn unknown_reference_is_reported() {
     let expr = parse_formula("@param.does.not.exist + 1").unwrap();
-    let diagnostic = check(&expr, Dim::Of(Dimension::LENGTH), &mut FixedResolver::default())
-        .expect_err("unknown reference must be rejected");
+    let diagnostic = check(
+        &expr,
+        Dim::Of(Dimension::LENGTH),
+        &mut FixedResolver::default(),
+    )
+    .expect_err("unknown reference must be rejected");
     assert_eq!(diagnostic.code, Code::UnknownReference);
 }
 
@@ -278,7 +286,10 @@ fn printing_round_trips_through_the_parser() {
         let parsed = parse_formula(source).unwrap();
         let printed = aircraft_expr::print(&parsed);
         let reparsed = parse_formula(&printed).unwrap();
-        assert_eq!(parsed, reparsed, "round-trip failed for {source} -> {printed}");
+        assert_eq!(
+            parsed, reparsed,
+            "round-trip failed for {source} -> {printed}"
+        );
     }
 }
 

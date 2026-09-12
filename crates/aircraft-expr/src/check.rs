@@ -177,8 +177,10 @@ impl Checker<'_> {
                 for arg in args {
                     checked.push(self.walk(arg, operand_expected)?);
                 }
-                let dim =
-                    self.unify_all(&format!("{} arguments", function.name()), &checked.iter().collect::<Vec<_>>())?;
+                let dim = self.unify_all(
+                    &format!("{} arguments", function.name()),
+                    &checked.iter().collect::<Vec<_>>(),
+                )?;
                 Ok(TExpr::Call(function, dim, checked))
             }
             Function::Lerp => {
@@ -196,11 +198,7 @@ impl Checker<'_> {
                         ),
                     ));
                 }
-                Ok(TExpr::Call(
-                    function,
-                    unified,
-                    vec![a, b, blend],
-                ))
+                Ok(TExpr::Call(function, unified, vec![a, b, blend]))
             }
             Function::Sqrt => {
                 let operand = self.walk(&args[0], Dim::Any)?;
@@ -212,18 +210,16 @@ impl Checker<'_> {
                             "sqrt does not accept a boolean",
                         ))
                     }
-                    Dim::Of(dimension) => {
-                        Dim::Of(dimension.sqrt().ok_or_else(|| {
-                            Diagnostic::error(
-                                Code::DimensionMismatch,
-                                format!(
-                                    "sqrt needs even exponents (for example the squared length \
+                    Dim::Of(dimension) => Dim::Of(dimension.sqrt().ok_or_else(|| {
+                        Diagnostic::error(
+                            Code::DimensionMismatch,
+                            format!(
+                                "sqrt needs even exponents (for example the squared length \
                                      inside a distance), got {}",
-                                    dimension.describe()
-                                ),
-                            )
-                        })?)
-                    }
+                                dimension.describe()
+                            ),
+                        )
+                    })?),
                 };
                 Ok(TExpr::Call(function, dim, vec![operand]))
             }
@@ -260,7 +256,11 @@ impl Checker<'_> {
                         ),
                     ));
                 }
-                Ok(TExpr::Call(function, Dim::Of(Dimension::RATIO), vec![operand]))
+                Ok(TExpr::Call(
+                    function,
+                    Dim::Of(Dimension::RATIO),
+                    vec![operand],
+                ))
             }
         }
     }
@@ -295,7 +295,7 @@ fn product_dim(lhs: Dim, rhs: Dim) -> Option<Dim> {
     match (lhs, rhs) {
         (Dim::Bool, _) | (_, Dim::Bool) => None,
         (Dim::Any, other) | (other, Dim::Any) => Some(other),
-        (Dim::Of(a), Dim::Of(b)) => Some(Dim::Of(a.mul(b))),
+        (Dim::Of(a), Dim::Of(b)) => Some(Dim::Of(a * b)),
     }
 }
 
@@ -305,7 +305,7 @@ fn quotient_dim(lhs: Dim, rhs: Dim) -> Option<Dim> {
         (Dim::Any, Dim::Any) => Some(Dim::Any),
         (Dim::Any, Dim::Of(rhs)) => Some(Dim::Of(rhs.invert())),
         (Dim::Of(lhs), Dim::Any) => Some(Dim::Of(lhs)),
-        (Dim::Of(lhs), Dim::Of(rhs)) => Some(Dim::Of(lhs.div(rhs))),
+        (Dim::Of(lhs), Dim::Of(rhs)) => Some(Dim::Of(lhs / rhs)),
     }
 }
 

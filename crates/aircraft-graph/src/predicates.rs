@@ -54,9 +54,13 @@ fn check_wing(
                             root_y.abs()
                         ),
                     )
-                    .with_path(aircraft_model::aircraft::station_path(component_index, 0)
-                        + "/position/y")
-                    .with_subject(format!("{} / station {} / position y", wing.id, wing.stations[0].id)),
+                    .with_path(
+                        aircraft_model::aircraft::station_path(component_index, 0) + "/position/y",
+                    )
+                    .with_subject(format!(
+                        "{} / station {} / position y",
+                        wing.id, wing.stations[0].id
+                    )),
                 );
             }
         }
@@ -75,13 +79,14 @@ fn check_wing(
                         format!(
                             "station {:?} must be further outboard (more negative local y) than \
                              station {:?}",
-                            wing.stations[station_index].id, wing.stations[station_index - 1].id
+                            wing.stations[station_index].id,
+                            wing.stations[station_index - 1].id
                         ),
                     )
-                    .with_path(aircraft_model::aircraft::station_path(
-                        component_index,
-                        station_index,
-                    ) + "/position/y")
+                    .with_path(
+                        aircraft_model::aircraft::station_path(component_index, station_index)
+                            + "/position/y",
+                    )
                     .with_subject(format!(
                         "{} / station {} / position y",
                         wing.id, wing.stations[station_index].id
