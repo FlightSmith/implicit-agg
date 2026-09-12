@@ -12,6 +12,7 @@ import type {
   WingStations,
 } from "../core/api";
 import { isMeshFailure, openCore } from "../core/api";
+import type { WingCatalog } from "../core/controlPolicy";
 import { WasmCore } from "../core/wasm";
 import type { DiagnosticDto } from "../core/types";
 
@@ -28,6 +29,7 @@ export interface TraceState {
 interface WorkspaceState {
   ready: boolean;
   core: CoreApi | null;
+  wingCatalog: WingCatalog | null;
   loadError: DiagnosticDto[];
   meta: DocumentMeta | null;
   revision: number;
@@ -58,6 +60,7 @@ interface WorkspaceState {
   selectTrace(triangleIndex: number): void;
   setBottomTab(tab: BottomTab): void;
   beginEdit(): void;
+  endEdit(): void;
   commit(fn: (core: CoreApi) => { committed: boolean }): void;
   undo(): void;
   redo(): void;
@@ -69,6 +72,7 @@ let editInProgress = false;
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   ready: false,
   core: null,
+  wingCatalog: null,
   loadError: [],
   meta: null,
   revision: 0,
@@ -96,7 +100,15 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   async loadDocument(json) {
     try {
       const core = await openCore(json);
-      set({ core, ready: true, loadError: [], undoStack: [], redoStack: [] });
+      const wingCatalog = (await WasmCore.wingCatalog()) as WingCatalog;
+      set({
+        core,
+        wingCatalog,
+        ready: true,
+        loadError: [],
+        undoStack: [],
+        redoStack: [],
+      });
       get().refresh();
       get().requestMesh();
     } catch (error) {
@@ -206,12 +218,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // snapshot is unchanged.
     set({ diagnostics: core.diagnostics() });
     if (result.committed) {
-      editInProgress = false;
       get().refresh();
       get().requestMesh();
     } else {
       set({ bottomTab: "diagnostics" });
     }
+  },
+
+  /** Close the current edit gesture; the next beginEdit opens a new undo
+   * entry. Gesture handlers (pointer up, blur, Enter) call this. */
+  endEdit() {
+    editInProgress = false;
   },
 
   undo() {
@@ -225,7 +242,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       redoStack: [...state.redoStack, current],
       trace: null,
     });
-    editInProgress = false;
+    get().endEdit();
     get().refresh();
     get().requestMesh();
   },

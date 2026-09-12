@@ -1,45 +1,52 @@
 {
   "schema": "component-catalog/v0.1",
   "componentKind": "wing",
-  "purpose": "Field dimensions, editor behavior, and adaptive control policies. This catalog is not aircraft source data.",
+  "purpose": "Field dimensions, editor behavior, and adaptive control policies. This catalog is not aircraft source data. safetyBounds are hard interface limits in document units; the engine's semantic validation still governs physical validity.",
   "fields": {
     "stations[].position.x": {
       "dimension": "length",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" },
+      "safetyBounds": { "min": -100, "max": 100 }
     },
     "stations[].position.y": {
       "dimension": "length",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" },
+      "safetyBounds": { "min": -100, "max": 100 }
     },
     "stations[].position.z": {
       "dimension": "length",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" }
+      "rangePolicy": { "kind": "signedAroundCurrent", "initialSpan": "relative" },
+      "safetyBounds": { "min": -100, "max": 100 }
     },
     "stations[].chord": {
       "dimension": "length",
       "constraint": "strictlyPositive",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" }
+      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" },
+      "safetyBounds": { "min": 0.001, "max": 100 }
     },
     "stations[].twist": {
       "dimension": "angle",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "angleAroundCurrent", "expand": "onBoundary" }
+      "rangePolicy": { "kind": "angleAroundCurrent", "expand": "onBoundary" },
+      "safetyBounds": { "min": -45, "max": 45 }
     },
     "stations[].trailingEdge.thickness": {
       "dimension": "length",
       "constraint": "nonNegativeAndProfileFeasible",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" }
+      "rangePolicy": { "kind": "positiveAroundCurrent", "expand": "onBoundary" },
+      "safetyBounds": { "min": 0, "max": 5 }
     },
     "stations[].trailingEdge.value": {
       "dimension": "ratio",
       "constraint": "nonNegativeAndProfileFeasible",
       "editor": "adaptive-number",
-      "rangePolicy": { "kind": "ratioAroundCurrent", "expand": "onBoundary" }
+      "rangePolicy": { "kind": "ratioAroundCurrent", "expand": "onBoundary" },
+      "safetyBounds": { "min": 0, "max": 0.25 }
     }
   },
   "semanticRules": [

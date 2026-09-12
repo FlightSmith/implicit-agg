@@ -3,6 +3,7 @@
 import init, {
   WasmEngine,
   demo_document_json,
+  wing_component_catalog,
 } from "../wasm-core/aircraft_wasm.js";
 import type {
   AircraftReport,
@@ -25,12 +26,34 @@ async function ensureInit(): Promise<void> {
   await initPromise;
 }
 
+/** serde_wasm_bindgen renders maps as ES Maps; the UI expects plain
+ * objects, so convert recursively. */
+function toPlain(value: unknown): unknown {
+  if (value instanceof Map) {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of value) {
+      out[String(key)] = toPlain(entry);
+    }
+    return out;
+  }
+  if (Array.isArray(value)) {
+    return value.map(toPlain);
+  }
+  return value;
+}
+
 export class WasmCore implements CoreApi {
   private constructor(private engine: WasmEngine) {}
 
   static async demoJson(): Promise<string> {
     await ensureInit();
     return demo_document_json();
+  }
+
+  /** The wing component catalog, once the wasm module is initialized. */
+  static async wingCatalog(): Promise<unknown> {
+    await ensureInit();
+    return toPlain(wing_component_catalog());
   }
 
   static async open(json: string): Promise<CoreApi> {

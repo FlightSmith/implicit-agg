@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CoreApi, StationRow, WingStations } from "../core/api";
+import {
+  atBoundary,
+  clampToPolicy,
+  expandWindow,
+  policyFor,
+  round4,
+  sliderWindow,
+} from "../core/controlPolicy";
 import type { FieldName, ValueMode } from "../core/types";
 import { typedValue } from "../core/types";
 import { useWorkspace } from "../state/store";
@@ -13,34 +21,37 @@ interface FieldProps {
   kind: string;
   value: number;
   unit: string;
-  positiveOnly: boolean;
-  parameterPath: string;
-}
-
-/** Adaptive range: centered on the current value, never crossing zero when
- * the catalog marks the field positive. Expansion is implicit — the slider
- * re-centers as the value moves. */
-function sliderRange(value: number, positiveOnly: boolean): [number, number] {
-  const span = Math.max(Math.abs(value) * 0.5, 0.25);
-  if (positiveOnly) {
-    return [Math.max(value - span, 0.001), value + span];
-  }
-  return [value - span, value + span];
 }
 
 function currentMode(kind: string): ValueMode {
   return kind === "parameter" ? "parameter" : kind === "expression" ? "expression" : "literal";
 }
 
+/**
+ * One editable numeric field. The slider and the number input are two views
+ * of the same edit session: dragging, typing, and the spinner arrows all
+ * apply live, values are rounded to four fraction digits, and the catalog's
+ * range policy bounds everything the interface can produce. The engine's
+ * semantic validation remains the authority on physical validity.
+ */
 function Field(props: FieldProps) {
-  const { core, wingIndex, station, field, label, kind, value, unit, positiveOnly } = props;
+  const { core, wingIndex, station, field, label, kind, value, unit } = props;
   const beginEdit = useWorkspace((s) => s.beginEdit);
+  const endEdit = useWorkspace((s) => s.endEdit);
   const commit = useWorkspace((s) => s.commit);
+  const wingCatalog = useWorkspace((s) => s.wingCatalog);
+  const policy = useMemo(() => policyFor(wingCatalog, field), [wingCatalog, field]);
+
   const [mode, setMode] = useState<ValueMode>(currentMode(kind));
   const [draft, setDraft] = useState(String(value));
+  const [range, setRange] = useState(() => sliderWindow(policy, value));
   const [newParameterId, setNewParameterId] = useState("");
   const [formula, setFormula] = useState("");
 
+  // A new station re-opens the adaptive window around its value.
+  useEffect(() => {
+    setRange(sliderWindow(policy, value));
+  }, [policy, station.id]);
   useEffect(() => {
     setMode(currentMode(kind));
     setDraft(String(value));
@@ -57,7 +68,40 @@ function Field(props: FieldProps) {
     );
   };
 
-  const [min, max] = sliderRange(value, positiveOnly);
+  /** Literal edits go through the catalog clamp and four-digit rounding. */
+  const applyLiteral = (raw: number) => {
+    const rounded = round4(clampToPolicy(policy, raw));
+    if (!Number.isFinite(rounded) || rounded === value) return;
+    apply(typedValue.literal(rounded));
+  };
+
+  const onSliderChange = (raw: number) => {
+    let next = round4(raw);
+    if (atBoundary(range, next, policy)) {
+      const grown = expandWindow(range, next, policy);
+      setRange(grown);
+      next = round4(clampToPolicy(policy, next));
+    }
+    beginEdit();
+    applyLiteral(next);
+  };
+
+  const onNumberChange = (text: string) => {
+    setDraft(text);
+    const parsed = Number(text);
+    if (text.trim() !== "" && Number.isFinite(parsed)) {
+      beginEdit();
+      applyLiteral(parsed);
+    }
+  };
+
+  const commitDraft = () => {
+    endEdit();
+    const parsed = Number(draft);
+    if (draft.trim() !== "" && Number.isFinite(parsed) && parsed !== value) {
+      applyLiteral(parsed);
+    }
+  };
 
   return (
     <div className="field" data-field={field}>
@@ -84,6 +128,7 @@ function Field(props: FieldProps) {
           onClick={() => {
             beginEdit();
             apply(typedValue.literal(value));
+            endEdit();
           }}
         >
           convert to literal {value.toFixed(4)}
@@ -94,15 +139,13 @@ function Field(props: FieldProps) {
         <div className="field-input">
           <input
             type="range"
-            min={min}
-            max={max}
-            step={(max - min) / 200}
-            value={value}
+            min={range.min}
+            max={range.max}
+            step={range.step}
+            value={Math.min(Math.max(value, range.min), range.max)}
             onPointerDown={() => beginEdit()}
-            onChange={(event) => {
-              beginEdit();
-              apply(typedValue.literal(Number(event.target.value)));
-            }}
+            onPointerUp={() => endEdit()}
+            onChange={(event) => onSliderChange(Number(event.target.value))}
             data-testid={`slider-${field}`}
           />
           <input
@@ -110,14 +153,9 @@ function Field(props: FieldProps) {
             type="number"
             value={draft}
             step="any"
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => {
-              const parsed = Number(draft);
-              if (Number.isFinite(parsed) && parsed !== value) {
-                beginEdit();
-                apply(typedValue.literal(parsed));
-              }
-            }}
+            onFocus={() => beginEdit()}
+            onChange={(event) => onNumberChange(event.target.value)}
+            onBlur={commitDraft}
             onKeyDown={(event) => {
               if (event.key === "Enter") (event.target as HTMLInputElement).blur();
             }}
@@ -133,6 +171,7 @@ function Field(props: FieldProps) {
             onChange={(event) => {
               beginEdit();
               apply(typedValue.parameter(event.target.value));
+              endEdit();
             }}
             data-testid={`select-${field}`}
           >
@@ -167,6 +206,7 @@ function Field(props: FieldProps) {
                   ),
                 );
               }
+              endEdit();
               setNewParameterId("");
             }}
           >
@@ -188,9 +228,11 @@ function Field(props: FieldProps) {
             value={formula}
             onChange={(event) => setFormula(event.target.value)}
             onBlur={() => {
+              endEdit();
               if (formula.trim()) {
                 beginEdit();
                 apply(typedValue.expression(formula.trim()));
+                endEdit();
               }
             }}
             onKeyDown={(event) => {
@@ -198,7 +240,9 @@ function Field(props: FieldProps) {
             }}
             data-testid={`expression-${field}`}
           />
-          {kind === "expression" && <span className="bound-value">evaluates to {value.toFixed(4)}</span>}
+          {kind === "expression" && (
+            <span className="bound-value">evaluates to {value.toFixed(4)}</span>
+          )}
         </div>
       )}
     </div>
@@ -250,8 +294,6 @@ export function Inspector() {
         kind={station.valueKinds.x}
         value={station.x}
         unit={meta.lengthUnit}
-        positiveOnly={false}
-        parameterPath={`${wing.wingId}/${station.id}/position.x`}
       />
       <Field
         core={core}
@@ -262,8 +304,6 @@ export function Inspector() {
         kind={station.valueKinds.y}
         value={station.y}
         unit={meta.lengthUnit}
-        positiveOnly={false}
-        parameterPath={`${wing.wingId}/${station.id}/position.y`}
       />
       <Field
         core={core}
@@ -274,8 +314,6 @@ export function Inspector() {
         kind={station.valueKinds.z}
         value={station.z}
         unit={meta.lengthUnit}
-        positiveOnly={false}
-        parameterPath={`${wing.wingId}/${station.id}/position.z`}
       />
       <Field
         core={core}
@@ -286,8 +324,6 @@ export function Inspector() {
         kind={station.valueKinds.chord}
         value={station.chord}
         unit={meta.lengthUnit}
-        positiveOnly={true}
-        parameterPath={`${wing.wingId}/${station.id}/chord`}
       />
       <Field
         core={core}
@@ -298,8 +334,6 @@ export function Inspector() {
         kind={station.valueKinds.twist}
         value={station.twist}
         unit={meta.angleUnit}
-        positiveOnly={false}
-        parameterPath={`${wing.wingId}/${station.id}/twist`}
       />
     </div>
   );

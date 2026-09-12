@@ -22,6 +22,13 @@ export function Viewport() {
   const meshPending = useWorkspace((s) => s.meshPending);
   const viewMode = useWorkspace((s) => s.viewMode);
   const traceTriangle = useWorkspace((s) => s.trace?.triangleIndex ?? -1);
+  const documentId = useWorkspace((s) => s.meta?.id);
+  // The camera is fitted once per loaded document and never on edits.
+  const hasFit = useRef(false);
+
+  useEffect(() => {
+    hasFit.current = false;
+  }, [documentId]);
 
   // One-time scene setup.
   useEffect(() => {
@@ -149,8 +156,11 @@ export function Viewport() {
     current.scene.add(sceneMesh);
     current.mesh = sceneMesh;
 
+    // Fit the camera once per document; geometry edits must never move the
+    // user's view.
     const box = geometry.boundingBox;
-    if (box) {
+    if (box && !hasFit.current) {
+      hasFit.current = true;
       const center = box.getCenter(new THREE.Vector3());
       const span = Math.max(
         box.max.x - box.min.x,
@@ -167,6 +177,14 @@ export function Viewport() {
       );
       current.controls.target.copy(center);
       current.controls.update();
+    }
+    if (box) {
+      const span = Math.max(
+        box.max.x - box.min.x,
+        Math.abs(box.max.y - box.min.y),
+        box.max.z - box.min.z,
+        1,
+      );
       const planeScale = span * 2;
       current.symmetryPlane.scale.set(planeScale, 1, planeScale);
     }

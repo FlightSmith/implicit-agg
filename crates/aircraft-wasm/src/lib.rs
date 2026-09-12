@@ -25,6 +25,17 @@ pub fn demo_document_json() -> String {
     include_str!("../../../examples/cranked-wing.v0.1.json").to_string()
 }
 
+/// The wing component catalog: field dimensions, constraints, and adaptive
+/// control-range policies that drive the inspector's editors.
+#[wasm_bindgen]
+pub fn wing_component_catalog() -> Result<JsValue, JsValue> {
+    let catalog: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../catalog/wing-component.v0.1.json"
+    ))
+    .map_err(|error| JsValue::from_str(&format!("embedded catalog is invalid: {error}")))?;
+    serde_wasm_bindgen::to_value(&catalog).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 fn diagnostics_to_dto(diagnostics: &[Diagnostic]) -> Vec<DiagnosticDto> {
     diagnostics
         .iter()

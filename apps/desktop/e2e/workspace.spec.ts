@@ -110,3 +110,42 @@ test("export STL produces a download", async ({ page }) => {
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("wing.stl");
 });
+
+test("typing in the number input updates the geometry without blur", async ({ page }) => {
+  await selectStation(page, "kink");
+  const chordField = page.locator(".field").filter({ hasText: "chord" }).first();
+  await chordField.getByRole("button", { name: "123", exact: true }).click();
+  await chordField.getByRole("button", { name: /convert to literal/ }).click();
+  const input = page.getByTestId("input-chord");
+  await expect(input).toHaveValue(/1\.15/);
+  // fill() fires only a change event — no blur — and the geometry must follow.
+  await input.fill("1.6");
+  await expect(page.getByTestId("report")).toContainText("20.1220", { timeout: 5_000 });
+});
+
+test("slider edits round to four fraction digits", async ({ page }) => {
+  await selectStation(page, "kink");
+  const chordField = page.locator(".field").filter({ hasText: "chord" }).first();
+  await chordField.getByRole("button", { name: "123", exact: true }).click();
+  await chordField.getByRole("button", { name: /convert to literal/ }).click();
+  const slider = page.getByTestId("slider-chord");
+  await slider.focus();
+  // Arrow keys move by the slider step; native range inputs accumulate
+  // binary floating noise, which the four-digit rounding must strip.
+  await slider.press("ArrowRight");
+  await page.waitForTimeout(300);
+  const applied = await page.getByTestId("input-chord").inputValue();
+  expect(applied).toMatch(/^\d+\.\d{1,4}$/);
+  expect(Number(applied)).toBeGreaterThan(1.15);
+});
+
+test("typed values clamp to the catalog safety bounds", async ({ page }) => {
+  await selectStation(page, "kink");
+  const chordField = page.locator(".field").filter({ hasText: "chord" }).first();
+  await chordField.getByRole("button", { name: "123", exact: true }).click();
+  await chordField.getByRole("button", { name: /convert to literal/ }).click();
+  const input = page.getByTestId("input-chord");
+  await input.fill("9999");
+  // The catalog caps wing-section chords at 100 document units.
+  await expect(input).toHaveValue(/^100$/, { timeout: 5_000 });
+});
