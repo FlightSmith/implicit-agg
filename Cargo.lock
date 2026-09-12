@@ -40,6 +40,11 @@ dependencies = [
 [[package]]
 name = "aircraft-graph"
 version = "0.1.0"
+dependencies = [
+ "aircraft-expr",
+ "aircraft-model",
+ "serde_json",
+]
 
 [[package]]
 name = "aircraft-model"
