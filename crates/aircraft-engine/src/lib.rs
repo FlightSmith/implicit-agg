@@ -35,6 +35,12 @@ pub enum Patch {
         id: String,
         value: f64,
     },
+    /// Create a named raw scalar. The id must be unique and well-formed; its
+    /// dimension is inferred from the first field that consumes it.
+    AddParameter {
+        id: String,
+        value: f64,
+    },
     SetStationField {
         component_index: usize,
         station_index: usize,
@@ -132,7 +138,8 @@ impl MeshArtifact {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SourceTrace {
     pub wing_id: String,
     pub stations: Vec<String>,
@@ -457,6 +464,27 @@ fn apply_to_document(
             doc.parameters.insert(id.clone(), *value);
             Ok(())
         }
+        Patch::AddParameter { id, value } => {
+            if !is_valid_parameter_id(id) {
+                return Err(Diagnostic::error(
+                    Code::SchemaViolation,
+                    format!(
+                        "parameter id {id:?} must start with a lowercase letter and use only \
+                         letters, digits, '.', '_' and '-'"
+                    ),
+                )
+                .with_path(format!("parameters/{id}")));
+            }
+            if doc.parameters.contains_key(id) {
+                return Err(Diagnostic::error(
+                    Code::DuplicateIdentifier,
+                    format!("parameter {id:?} already exists"),
+                )
+                .with_path(format!("parameters/{id}")));
+            }
+            doc.parameters.insert(id.clone(), *value);
+            Ok(())
+        }
         Patch::SetStationField {
             component_index,
             station_index,
@@ -508,7 +536,9 @@ fn apply_to_document(
 /// Resolve a patch's seed nodes against a freshly built graph.
 fn resolve_seeds(graph: &Graph, patch: &Patch) -> Vec<usize> {
     match patch {
-        Patch::SetParameter { id, .. } => graph.parameter_node(id).into_iter().collect(),
+        Patch::SetParameter { id, .. } | Patch::AddParameter { id, .. } => {
+            graph.parameter_node(id).into_iter().collect()
+        }
         Patch::SetStationField {
             component_index,
             station_index,
@@ -519,6 +549,16 @@ fn resolve_seeds(graph: &Graph, patch: &Patch) -> Vec<usize> {
             .into_iter()
             .collect(),
     }
+}
+
+/// The schema's parameter id pattern: `^[a-z][A-Za-z0-9._-]*$`.
+fn is_valid_parameter_id(id: &str) -> bool {
+    let mut chars = id.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
 }
 
 fn unknown_component(component_index: usize) -> Diagnostic {

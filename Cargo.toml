@@ -7,6 +7,7 @@ members = [
     "crates/aircraft-geom",
     "crates/meshio",
     "crates/aircraft-engine",
+    "crates/aircraft-wasm",
     "apps/cli",
 ]
 

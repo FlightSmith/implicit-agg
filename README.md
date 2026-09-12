@@ -47,7 +47,7 @@ Those capabilities have explicit extension points so the future buried-engine / 
 
 ## Implementation status
 
-Milestones 0 and 1 are implemented as a Rust workspace:
+Milestones 0, 1, and 2 are implemented as a Rust workspace plus a web workspace:
 
 - `crates/aircraft-model` — typed v0.1 document model, JSON Schema validation, semantic checks.
 - `crates/aircraft-expr` — the typed dimensional expression language (parser, checker, evaluator).
@@ -55,9 +55,28 @@ Milestones 0 and 1 are implemented as a Rust workspace:
 - `crates/aircraft-geom` — profiles (NACA 4-series, normalized coordinates with lossless repair), station sections with twist and trailing-edge closure, lofting, symmetry mirror and centerline weld, manifold validation, adaptive meshing, planform and volume metrics.
 - `crates/meshio` — binary/ASCII STL, OBJ, and GLB export.
 - `crates/aircraft-engine` — the service API: transactional patches with affected-node reporting, cancellation tokens and stale-revision guards, content-addressed mesh cache, selection tracing, derived reports.
+- `crates/aircraft-wasm` — the engine bound for WebAssembly; the browser compute core, with a command surface mirroring the planned Tauri IPC API.
+- `apps/desktop` — the live workspace (React + TypeScript + three.js via Vite): design tree, 3D viewport with symmetry-plane overlay and mesh picking traced to source stations, an inspector with literal/parameter/expression value modes, adaptive sliders, undo/redo, live diagnostics, and STL/OBJ/GLB export.
 - `apps/cli` — headless `validate`, `evaluate`, and `report` commands; the fixture harness under `examples/fixtures/`.
 
-Milestone 2 (the live Tauri/React workspace) comes next; see the [implementation plan](docs/10-implementation-plan.md).
+### Running the live workspace
+
+```sh
+cd apps/desktop
+npm install
+npx playwright install chromium   # one-time, for the E2E suite
+npm run dev                       # wasm core + vite dev server on :5173
+npm run e2e                       # headless E2E suite against the production build
+```
+
+The compute core is the same Rust engine compiled to `wasm32-unknown-unknown`
+and regenerated automatically by `npm run core:wasm`. The UI talks to it only
+through the `CoreApi` interface in `src/core/api.ts`, so a Tauri 2 desktop
+shell can replace the backend without UI changes; the shell is deferred until
+a build environment with `libwebkit2gtk-4.1-dev` is available.
+
+Milestone 3+ (multi-surface assembly, propulsion, imported-solid Booleans)
+comes next; see the [implementation plan](docs/10-implementation-plan.md).
 
 ### Building and testing
 

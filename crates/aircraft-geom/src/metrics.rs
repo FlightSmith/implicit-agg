@@ -5,15 +5,18 @@
 use crate::mesh::Mesh;
 use crate::wing::EvaluatedStation;
 use aircraft_model::{Code, Diagnostic};
+use serde::Serialize;
 
 /// A quantity reported for both the source half and the mirrored full wing.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BasisPair {
     pub half: f64,
     pub full: f64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PanelMetrics {
     /// Leading-edge sweep, canonical radians.
     pub leading_edge_sweep: f64,
@@ -25,7 +28,8 @@ pub struct PanelMetrics {
     pub dihedral: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlanformMetrics {
     /// Projected reference area on the XZ plane.
     pub reference_area: BasisPair,
@@ -41,7 +45,8 @@ pub struct PlanformMetrics {
     pub panels: Vec<PanelMetrics>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VolumeMetrics {
     pub volume: BasisPair,
     pub wetted_area: BasisPair,

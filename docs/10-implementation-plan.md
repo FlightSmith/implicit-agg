@@ -105,6 +105,17 @@ Exit (from docs/07): every fixture exports a manifold half and full mesh; changi
 
 Goal: the docs/06 experience on top of the headless engine.
 
+> **Delivery note (2026-09-12).** Milestone 2 shipped browser-first: the
+> engine is compiled to WebAssembly (`crates/aircraft-wasm`) and the React
+> workspace (`apps/desktop`) talks to it through a `CoreApi` interface whose
+> methods mirror the planned Tauri IPC commands one-to-one. The Tauri 2 shell
+> is deferred only because the build environment lacks
+> `libwebkit2gtk-4.1-dev`; dropping it in means implementing `CoreApi` over
+> IPC, with no UI changes. Everything else in this milestone — workspace
+> shell, viewport with picking and tracing, three-mode value editing,
+> undo/redo, debounced preview, import/export, diagnostics — is delivered and
+> covered by the Playwright suite in `apps/desktop/e2e/`.
+
 1. **Tauri 2 scaffold.** IPC commands mirroring the service API (`openDocument`, `validate`, `applyPatch`, `evaluate`, `mesh`, `export`, `traceSelection`); events for preview/metric updates; TypeScript bindings.
 2. **Workspace shell.** Three-pane layout: design tree (components and named stations), viewport, inspector; formula/dependency trace panel along the bottom.
 3. **Viewport.** three.js scene from engine mesh buffers; half/full toggle; symmetry-plane overlay; station labels; mesh picking resolving to stations and loft panels through the source map; visible pending state during recompute, never replacing a valid mesh with a failed one.

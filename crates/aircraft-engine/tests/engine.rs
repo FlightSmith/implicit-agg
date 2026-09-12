@@ -321,3 +321,42 @@ fn document_round_trip_reopens_identically() {
 }
 
 use std::sync::Arc;
+
+#[test]
+fn add_parameter_creates_a_usable_scalar() {
+    let mut engine = engine();
+    let add = engine.apply_patch(
+        Patch::AddParameter {
+            id: "wing.customTwist".into(),
+            value: -2.0,
+        },
+        TransactionId(20),
+    );
+    assert!(add.committed, "diagnostics: {:?}", add.diagnostics);
+
+    // The new scalar can feed a field immediately.
+    let bind = engine.apply_patch(
+        Patch::SetStationField {
+            component_index: 0,
+            station_index: 2,
+            field: FieldKind::Twist,
+            value: TypedValue::param("wing.customTwist"),
+        },
+        TransactionId(21),
+    );
+    assert!(bind.committed, "diagnostics: {:?}", bind.diagnostics);
+    let stations = engine.evaluated_stations(0).unwrap().1;
+    assert!((stations[2].twist - (-2.0_f64).to_radians()).abs() < 1e-12);
+
+    // Duplicate and malformed ids are rejected without committing.
+    for bad in ["wing.customTwist", "BadId", "2cool"] {
+        let result = engine.apply_patch(
+            Patch::AddParameter {
+                id: bad.into(),
+                value: 0.0,
+            },
+            TransactionId(22),
+        );
+        assert!(!result.committed, "{bad} must be rejected");
+    }
+}

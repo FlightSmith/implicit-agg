@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aircraft Workspace</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.__errors = [];
+      window.addEventListener("error", (event) =>
+        window.__errors.push(String(event.error ?? event.message)),
+      );
+      window.addEventListener("unhandledrejection", (event) =>
+        window.__errors.push(String(event.reason)),
+      );
+      window.__clicks = [];
+      document.addEventListener(
+        "click",
+        (event) =>
+          window.__clicks.push(
+            (event.target.tagName || "?") + ":" + (event.target.textContent || "").slice(0, 20),
+          ),
+        true,
+      );
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

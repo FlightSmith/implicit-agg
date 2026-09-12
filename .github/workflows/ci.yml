@@ -20,3 +20,24 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  workspace-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: cargo install wasm-pack
+      - run: npm ci
+        working-directory: apps/desktop
+      - run: npx playwright install chromium --with-deps
+        working-directory: apps/desktop
+      - run: npm run build
+        working-directory: apps/desktop
+      - run: npx playwright test
+        working-directory: apps/desktop

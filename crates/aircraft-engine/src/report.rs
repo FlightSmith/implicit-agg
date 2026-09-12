@@ -6,7 +6,8 @@ use aircraft_geom::metrics::{volume_metrics, VolumeMetrics};
 use aircraft_geom::quality::MeshQuality;
 use aircraft_geom::PlanformMetrics;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WingReport {
     pub wing_id: String,
     /// Planform metrics in aircraft coordinates (position-like quantities
@@ -18,13 +19,15 @@ pub struct WingReport {
     pub mesh_statistics: MeshStatistics,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MeshStatistics {
     pub vertices: usize,
     pub triangles: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftReport {
     pub revision: u64,
     pub wings: Vec<WingReport>,
