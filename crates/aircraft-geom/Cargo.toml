@@ -1,0 +1,11 @@
+[package]
+name = "aircraft-geom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aircraft-model = { path = "../aircraft-model" }
+
+[lints]
+workspace = true

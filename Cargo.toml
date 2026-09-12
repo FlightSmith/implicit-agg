@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/aircraft-model", "crates/aircraft-expr", "crates/aircraft-graph", "apps/cli"]
+members = [
+    "crates/aircraft-model",
+    "crates/aircraft-expr",
+    "crates/aircraft-graph",
+    "crates/aircraft-geom",
+    "crates/meshio",
+    "crates/aircraft-engine",
+    "apps/cli",
+]
 
 [workspace.package]
 version = "0.1.0"
