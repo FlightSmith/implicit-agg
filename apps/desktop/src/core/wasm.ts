@@ -93,6 +93,14 @@ export class WasmCore implements CoreApi {
     return this.engine.add_parameter(id, value, transaction) as UpdateResultDto;
   }
 
+  setLeTangency(
+    componentIndex: number,
+    spec: string | null,
+    transaction: number,
+  ): UpdateResultDto {
+    return this.engine.set_le_tangency(componentIndex, spec, transaction) as UpdateResultDto;
+  }
+
   setStationField(
     componentIndex: number,
     stationIndex: number,

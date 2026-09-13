@@ -34,6 +34,8 @@ pub enum Code {
     InvalidProfile,
     /// Mesh generation failed; the message names the geometry and tolerance.
     MeshFailure,
+    /// A tangency spec is malformed or contradictory.
+    InvalidTangency,
     /// A required identifier is duplicated.
     DuplicateIdentifier,
     /// The global unit system is missing or inconsistent.
@@ -57,6 +59,7 @@ impl Code {
             Code::InvalidTrailingEdge => "invalid-trailing-edge",
             Code::InvalidProfile => "invalid-profile",
             Code::MeshFailure => "mesh-failure",
+            Code::InvalidTangency => "invalid-tangency",
             Code::DuplicateIdentifier => "duplicate-identifier",
             Code::InvalidUnits => "invalid-units",
             Code::Internal => "internal",

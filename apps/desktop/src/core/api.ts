@@ -84,6 +84,8 @@ export interface WingStations {
   wingId: string;
   /** Interface names published by this wing (autocomplete candidates). */
   interfaces: string[];
+  /** Leading-edge tangency DSL, when set. */
+  leTangency: string | null;
   stations: StationRow[];
 }
 
@@ -136,6 +138,11 @@ export interface CoreApi {
   parameters(): Record<string, number>;
   setParameter(id: string, value: number, transaction: number): UpdateResultDto;
   addParameter(id: string, value: number, transaction: number): UpdateResultDto;
+  setLeTangency(
+    componentIndex: number,
+    spec: string | null,
+    transaction: number,
+  ): UpdateResultDto;
   setStationField(
     componentIndex: number,
     stationIndex: number,

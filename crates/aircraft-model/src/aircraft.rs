@@ -175,12 +175,20 @@ pub enum WingRole {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Tangency {
+    #[serde(rename = "leadingEdge")]
+    pub leading_edge: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wing {
     pub id: String,
     pub role: WingRole,
     pub frame: Frame,
     pub symmetry: Symmetry,
     pub stations: Vec<Station>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tangency: Option<Tangency>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub interfaces: BTreeMap<String, Interface>,
 }

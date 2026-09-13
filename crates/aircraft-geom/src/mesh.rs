@@ -120,6 +120,16 @@ impl Mesh {
         validation
     }
 
+    /// Projected area on the XY plane — the planform view (span x chord,
+    /// looking down Z). Exact for the faceted mesh, so tangent-LE curvature
+    /// is fully accounted for.
+    pub fn projected_area_xy(&self) -> f64 {
+        self.triangles
+            .iter()
+            .map(|&triangle| self.triangle_normal(triangle)[2].abs() / 2.0)
+            .sum()
+    }
+
     /// Total triangle area.
     pub fn surface_area(&self) -> f64 {
         self.triangles
@@ -248,6 +258,10 @@ pub fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 
 pub fn vnorm(a: [f64; 3]) -> f64 {
     dot(a, a).sqrt()
+}
+
+pub fn vnormalize(a: [f64; 3]) -> [f64; 3] {
+    vscale(a, 1.0 / vnorm(a))
 }
 
 pub fn lerp3(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {

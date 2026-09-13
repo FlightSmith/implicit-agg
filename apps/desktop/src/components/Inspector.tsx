@@ -265,6 +265,74 @@ function bindKeyOf(field: FieldName): keyof StationRow["bindings"] {
   }
 }
 
+/** Wing-level leading-edge tangency: presets plus the raw DSL. */
+function WingTangency({
+  wingIndex,
+  wing,
+}: {
+  wingIndex: number;
+  wing: WingStations;
+}) {
+  const beginEdit = useWorkspace((s) => s.beginEdit);
+  const endEdit = useWorkspace((s) => s.endEdit);
+  const commit = useWorkspace((s) => s.commit);
+  const [draft, setDraft] = useState(wing.leTangency ?? "");
+
+  useEffect(() => setDraft(wing.leTangency ?? ""), [wing.leTangency]);
+
+  const apply = (spec: string | null) => {
+    beginEdit();
+    commit((api) => api.setLeTangency(wingIndex, spec, Date.now()));
+    endEdit();
+  };
+
+  const commitDraft = () => {
+    const text = draft.trim();
+    if (text === (wing.leTangency ?? "")) return;
+    apply(text === "" ? null : text);
+  };
+
+  const presets: [string, string | null][] = [
+    ["none", null],
+    ["left-auto", "left:auto"],
+    ["right-auto", "right:auto"],
+    ["full-auto", "full:auto"],
+  ];
+
+  return (
+    <div className="field" data-testid="tangency">
+      <div className="field-head">
+        <span className="field-label">wing LE tangency</span>
+      </div>
+      <div className="presets">
+        {presets.map(([label, spec]) => (
+          <button
+            key={label}
+            className={(wing.leTangency ?? null) === spec ? "mode selected" : "mode"}
+            onClick={() => apply(spec)}
+            data-testid={`tangency-preset-${label}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="field-input">
+        <input
+          className="expression"
+          placeholder="left:auto;right:0.8,0,0.1"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+          }}
+          data-testid="tangency-input"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function Inspector() {
   const core = useWorkspace((s) => s.core);
   const stations = useWorkspace((s) => s.stations);
@@ -285,6 +353,7 @@ export function Inspector() {
       <div className="station-meta">
         airfoil {station.airfoil} · units {meta.lengthUnit}, {meta.angleUnit}
       </div>
+      <WingTangency wingIndex={wingIndex} wing={wing} />
       <Field
         core={core}
         wingIndex={wingIndex}

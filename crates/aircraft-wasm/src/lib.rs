@@ -182,6 +182,8 @@ struct WingStationsDto {
     wing_id: String,
     /// Interface names published by this wing, for expression autocomplete.
     interfaces: Vec<String>,
+    /// The leading-edge tangency DSL, when set.
+    le_tangency: Option<String>,
     stations: Vec<StationRowDto>,
 }
 
@@ -239,6 +241,24 @@ impl WasmEngine {
                 value,
             },
             TransactionId(u64::from(transaction)),
+        );
+        self.record(&result);
+        serde_wasm_bindgen::to_value(&update_result_dto(&result, &self.engine))
+            .expect("serializable result")
+    }
+
+    pub fn set_le_tangency(
+        &mut self,
+        component_index: usize,
+        spec: Option<String>,
+        transaction: u32,
+    ) -> JsValue {
+        let result = self.engine.apply_patch(
+            aircraft_engine::Patch::SetLeTangency {
+                component_index,
+                spec,
+            },
+            aircraft_engine::TransactionId(u64::from(transaction)),
         );
         self.record(&result);
         serde_wasm_bindgen::to_value(&update_result_dto(&result, &self.engine))
@@ -332,15 +352,17 @@ impl WasmEngine {
                     })
                 })
                 .collect();
-            let interfaces = match doc.components.get(component_index) {
-                Some(aircraft_model::aircraft::Component::Wing(wing)) => {
-                    wing.interfaces.keys().cloned().collect()
-                }
-                _ => Vec::new(),
+            let (interfaces, le_tangency) = match doc.components.get(component_index) {
+                Some(aircraft_model::aircraft::Component::Wing(wing)) => (
+                    wing.interfaces.keys().cloned().collect(),
+                    wing.tangency.as_ref().map(|t| t.leading_edge.clone()),
+                ),
+                _ => (Vec::new(), None),
             };
             wings.push(WingStationsDto {
                 wing_id,
                 interfaces,
+                le_tangency,
                 stations: rows,
             });
         }

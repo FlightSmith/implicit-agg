@@ -78,37 +78,95 @@
     "units": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["length", "angle", "mass", "force", "pressure"],
+      "required": [
+        "length",
+        "angle",
+        "mass",
+        "force",
+        "pressure"
+      ],
       "properties": {
-        "length": { "enum": ["m", "mm", "ft", "in"] },
-        "angle": { "enum": ["deg", "rad"] },
-        "mass": { "enum": ["kg", "lbm"] },
-        "force": { "enum": ["N", "lbf"] },
-        "pressure": { "enum": ["Pa", "kPa", "psi"] }
+        "length": {
+          "enum": [
+            "m",
+            "mm",
+            "ft",
+            "in"
+          ]
+        },
+        "angle": {
+          "enum": [
+            "deg",
+            "rad"
+          ]
+        },
+        "mass": {
+          "enum": [
+            "kg",
+            "lbm"
+          ]
+        },
+        "force": {
+          "enum": [
+            "N",
+            "lbf"
+          ]
+        },
+        "pressure": {
+          "enum": [
+            "Pa",
+            "kPa",
+            "psi"
+          ]
+        }
       }
     },
     "coordinateSystem": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["axes", "origin"],
+      "required": [
+        "axes",
+        "origin"
+      ],
       "properties": {
         "axes": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["x", "y", "z"],
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
           "properties": {
-            "x": { "const": "aft" },
-            "y": { "const": "starboard" },
-            "z": { "const": "up" }
+            "x": {
+              "const": "aft"
+            },
+            "y": {
+              "const": "starboard"
+            },
+            "z": {
+              "const": "up"
+            }
           }
         },
         "origin": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "name"],
+          "required": [
+            "kind",
+            "name"
+          ],
           "properties": {
-            "kind": { "enum": ["named-datum", "user-selected"] },
-            "name": { "type": "string", "minLength": 1 }
+            "kind": {
+              "enum": [
+                "named-datum",
+                "user-selected"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       }
@@ -116,11 +174,15 @@
     "typedValue": {
       "description": "A literal, parameter reference, or typed expression. Field location provides the expected dimension.",
       "oneOf": [
-        { "type": "number" },
+        {
+          "type": "number"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["$param"],
+          "required": [
+            "$param"
+          ],
           "properties": {
             "$param": {
               "type": "string",
@@ -139,18 +201,31 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "code"],
+          "required": [
+            "kind",
+            "code"
+          ],
           "properties": {
-            "kind": { "const": "naca4" },
-            "code": { "type": "string", "pattern": "^[0-9]{4}$" }
+            "kind": {
+              "const": "naca4"
+            },
+            "code": {
+              "type": "string",
+              "pattern": "^[0-9]{4}$"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "points"],
+          "required": [
+            "kind",
+            "points"
+          ],
           "properties": {
-            "kind": { "const": "coordinates" },
+            "kind": {
+              "const": "coordinates"
+            },
             "points": {
               "type": "array",
               "minItems": 3,
@@ -158,7 +233,9 @@
                 "type": "array",
                 "minItems": 2,
                 "maxItems": 2,
-                "items": { "type": "number" }
+                "items": {
+                  "type": "number"
+                }
               }
             }
           }
@@ -168,11 +245,21 @@
     "position": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y", "z"],
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
       "properties": {
-        "x": { "$ref": "#/$defs/typedValue" },
-        "y": { "$ref": "#/$defs/typedValue" },
-        "z": { "$ref": "#/$defs/typedValue" }
+        "x": {
+          "$ref": "#/$defs/typedValue"
+        },
+        "y": {
+          "$ref": "#/$defs/typedValue"
+        },
+        "z": {
+          "$ref": "#/$defs/typedValue"
+        }
       }
     },
     "trailingEdge": {
@@ -180,27 +267,45 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["mode"],
+          "required": [
+            "mode"
+          ],
           "properties": {
-            "mode": { "const": "sharp" }
+            "mode": {
+              "const": "sharp"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["mode", "thickness"],
+          "required": [
+            "mode",
+            "thickness"
+          ],
           "properties": {
-            "mode": { "const": "absolute" },
-            "thickness": { "$ref": "#/$defs/typedValue" }
+            "mode": {
+              "const": "absolute"
+            },
+            "thickness": {
+              "$ref": "#/$defs/typedValue"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["mode", "value"],
+          "required": [
+            "mode",
+            "value"
+          ],
           "properties": {
-            "mode": { "const": "chordFraction" },
-            "value": { "$ref": "#/$defs/typedValue" }
+            "mode": {
+              "const": "chordFraction"
+            },
+            "value": {
+              "$ref": "#/$defs/typedValue"
+            }
           }
         }
       ]
@@ -208,75 +313,173 @@
     "station": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "position", "chord", "twist", "airfoil"],
+      "required": [
+        "id",
+        "position",
+        "chord",
+        "twist",
+        "airfoil"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "position": { "$ref": "#/$defs/position" },
-        "chord": { "$ref": "#/$defs/typedValue" },
-        "twist": { "$ref": "#/$defs/typedValue" },
-        "airfoil": { "$ref": "#/$defs/id" },
-        "trailingEdge": { "$ref": "#/$defs/trailingEdge" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "chord": {
+          "$ref": "#/$defs/typedValue"
+        },
+        "twist": {
+          "$ref": "#/$defs/typedValue"
+        },
+        "airfoil": {
+          "$ref": "#/$defs/id"
+        },
+        "trailingEdge": {
+          "$ref": "#/$defs/trailingEdge"
+        }
       }
     },
     "symmetry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "plane", "sourceSide", "centerlineTreatment"],
+      "required": [
+        "enabled",
+        "plane",
+        "sourceSide",
+        "centerlineTreatment"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "plane": { "const": "local-xz" },
-        "sourceSide": { "const": "negative-local-y" },
-        "centerlineTreatment": { "enum": ["weld", "open"] }
+        "enabled": {
+          "type": "boolean"
+        },
+        "plane": {
+          "const": "local-xz"
+        },
+        "sourceSide": {
+          "const": "negative-local-y"
+        },
+        "centerlineTreatment": {
+          "enum": [
+            "weld",
+            "open"
+          ]
+        }
       }
     },
     "frame": {
       "type": "object",
       "description": "Component-local frame relative to the aircraft coordinate system. Wing station values are expressed in this frame.",
       "additionalProperties": false,
-      "required": ["origin", "axes"],
+      "required": [
+        "origin",
+        "axes"
+      ],
       "properties": {
-        "origin": { "$ref": "#/$defs/position" },
-        "axes": { "const": "inherit-aircraft" }
+        "origin": {
+          "$ref": "#/$defs/position"
+        },
+        "axes": {
+          "const": "inherit-aircraft"
+        }
       }
     },
     "stationPlaneInterface": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "station"],
+      "required": [
+        "kind",
+        "station"
+      ],
       "properties": {
-        "kind": { "const": "station-plane" },
-        "station": { "$ref": "#/$defs/id" }
+        "kind": {
+          "const": "station-plane"
+        },
+        "station": {
+          "$ref": "#/$defs/id"
+        }
       }
     },
     "wing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "id", "role", "frame", "symmetry", "stations"],
+      "required": [
+        "kind",
+        "id",
+        "role",
+        "frame",
+        "symmetry",
+        "stations"
+      ],
       "properties": {
-        "kind": { "const": "wing" },
-        "id": { "$ref": "#/$defs/id" },
-        "role": { "enum": ["main", "canard", "tail", "fin", "other"] },
-        "frame": { "$ref": "#/$defs/frame" },
-        "symmetry": { "$ref": "#/$defs/symmetry" },
+        "kind": {
+          "const": "wing"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "enum": [
+            "main",
+            "canard",
+            "tail",
+            "fin",
+            "other"
+          ]
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "symmetry": {
+          "$ref": "#/$defs/symmetry"
+        },
         "stations": {
           "type": "array",
           "minItems": 2,
-          "items": { "$ref": "#/$defs/station" }
+          "items": {
+            "$ref": "#/$defs/station"
+          }
         },
         "interfaces": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/stationPlaneInterface" }
+          "additionalProperties": {
+            "$ref": "#/$defs/stationPlaneInterface"
+          }
+        },
+        "tangency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "leadingEdge"
+          ],
+          "properties": {
+            "leadingEdge": {
+              "type": "string",
+              "description": "Leading-edge tangency DSL for the first two panels. Sides: left = root-kink panel, right = kink-tip panel, full = both. Spec per side: 'auto' (adapt to the other side; full:auto uses the mean direction) or a tangent vector 'x,y,z' in aircraft axes. Examples: 'left:auto', 'full:auto', 'left:auto;right:0.8,0,0.1'.",
+              "pattern": "^(left|right|full):(auto|-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?)(;(left|right|full):(auto|-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?))?$"
+            }
+          }
         }
       }
     },
     "analysisCase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "mach"],
+      "required": [
+        "id",
+        "mach"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "mach": { "type": "number" },
-        "altitude": { "$ref": "#/$defs/typedValue" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "mach": {
+          "type": "number"
+        },
+        "altitude": {
+          "$ref": "#/$defs/typedValue"
+        }
       }
     }
   }

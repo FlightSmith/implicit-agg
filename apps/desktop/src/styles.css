@@ -301,6 +301,29 @@ body {
   font-size: 11px;
 }
 
+.presets {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.presets button {
+  background: #21262d;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.presets button.selected {
+  background: var(--selected);
+  border-color: var(--selected);
+  color: white;
+}
+
 .expression-wrap {
   position: relative;
   width: 100%;

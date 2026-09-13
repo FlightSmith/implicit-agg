@@ -63,6 +63,38 @@ fn validate_wing(
     wing: &crate::aircraft::Wing,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    if let Some(tangency) = &wing.tangency {
+        match crate::tangency::parse_le_tangency(&tangency.leading_edge) {
+            Ok(parsed) => {
+                if parsed.is_empty() {
+                    diagnostics.push(
+                        Diagnostic::error(
+                            Code::InvalidTangency,
+                            "tangency must name at least one side",
+                        )
+                        .with_path(format!("components/{component_index}/tangency"))
+                        .with_subject(format!("component {} / tangency", wing.id)),
+                    );
+                }
+            }
+            Err(diagnostic) => diagnostics.push(
+                diagnostic
+                    .with_path(format!("components/{component_index}/tangency/leadingEdge"))
+                    .with_subject(format!("component {} / tangency", wing.id)),
+            ),
+        }
+        if wing.stations.len() < 3 {
+            diagnostics.push(
+                Diagnostic::error(
+                    Code::InvalidTangency,
+                    "leading-edge tangency needs at least three stations (two panels)",
+                )
+                .with_path(format!("components/{component_index}/stations"))
+                .with_subject(format!("component {} / tangency", wing.id)),
+            );
+        }
+    }
+
     let mut station_ids: Vec<&str> = Vec::new();
     for (station_index, station) in wing.stations.iter().enumerate() {
         let path = station_path(component_index, station_index);

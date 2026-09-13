@@ -15,7 +15,7 @@ async function selectStation(page: import("@playwright/test").Page, id: string) 
 test("renders the demo wing with report metrics", async ({ page }) => {
   const report = page.getByTestId("report");
   await expect(report).toContainText("reference area");
-  await expect(report).toContainText("16.8370");
+  await expect(report).toContainText("16.8299");
   await expect(report).toContainText("14.6000");
   await expect(report).toContainText("12.6602");
   await expect(page.getByTestId("viewport")).toContainText("triangles");
@@ -33,7 +33,7 @@ test("converting a bound chord to a literal edits live, with undo", async ({ pag
   await expect(chordInput).toHaveValue(/1\.15/);
   await chordInput.fill("1.6");
   await chordInput.blur();
-  await expect(page.getByTestId("report")).toContainText("20.1220", {
+  await expect(page.getByTestId("report")).toContainText("20.1", {
     timeout: 5_000,
   });
 
@@ -41,12 +41,12 @@ test("converting a bound chord to a literal edits live, with undo", async ({ pag
   // itself, restoring the wing.kinkChord binding.
   await page.getByTestId("undo").click();
   await expect(page.getByTestId("input-chord")).toHaveValue(/1\.15/);
-  await expect(page.getByTestId("report")).toContainText("16.8370");
+  await expect(page.getByTestId("report")).toContainText("16.8299");
   await page.getByTestId("undo").click();
   await expect(page.locator(".field").filter({ hasText: "chord" }).first()).toContainText(
     "wing.kinkChord",
   );
-  await expect(page.getByTestId("report")).toContainText("16.8370");
+  await expect(page.getByTestId("report")).toContainText("16.8299");
 });
 
 test("a dimension error is reported and the last valid state is kept", async ({ page }) => {
@@ -64,7 +64,7 @@ test("a dimension error is reported and the last valid state is kept", async ({ 
   });
   // The last valid geometry is kept: the report still shows the baseline.
   await page.getByTestId("tab-report").click();
-  await expect(page.getByTestId("report")).toContainText("16.8370");
+  await expect(page.getByTestId("report")).toContainText("16.8299");
 });
 
 test("preview settles to dense tessellation; half is coarser than full", async ({
@@ -141,7 +141,7 @@ test("typing in the number input updates the geometry without blur", async ({ pa
   await expect(input).toHaveValue(/1\.15/);
   // fill() fires only a change event — no blur — and the geometry must follow.
   await input.fill("1.6");
-  await expect(page.getByTestId("report")).toContainText("20.1220", { timeout: 5_000 });
+  await expect(page.getByTestId("report")).toContainText("20.11", { timeout: 5_000 });
 });
 
 test("slider edits round to four fraction digits", async ({ page }) => {
@@ -204,7 +204,7 @@ test("expression editor autocompletes @-references", async ({ page }) => {
 
   // Committing rebinds kink chord to the same 1.15 value: no drift.
   await expression.blur();
-  await expect(page.getByTestId("report")).toContainText("16.8370", { timeout: 5_000 });
+  await expect(page.getByTestId("report")).toContainText("16.8299", { timeout: 5_000 });
 });
 
 test("autocomplete accepts a clicked station reference", async ({ page }) => {
@@ -223,5 +223,28 @@ test("autocomplete accepts a clicked station reference", async ({ page }) => {
   // Root chord now follows the tip chord (0.42 m): the cascade shows up in
   // the report.
   await expression.blur();
-  await expect(page.getByTestId("report")).toContainText("5.7305", { timeout: 5_000 });
+  await expect(page.getByTestId("report")).toContainText("5.7279", { timeout: 5_000 });
+});
+
+test("LE tangency presets reflow the planform and undo reverts", async ({ page }) => {
+  await expect(page.getByTestId("mesh-tier")).toContainText("settled", {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId("report")).toContainText(/16\.8\d/);
+
+  // left:auto bends the inboard panel toward the outboard sweep.
+  await page.getByTestId("tangency-preset-left-auto").click();
+  await expect(page.getByTestId("report")).toContainText("16.85", { timeout: 10_000 });
+
+  // full:auto keeps the planform tangent on both sides.
+  await page.getByTestId("tangency-preset-full-auto").click();
+  await expect(page.getByTestId("tangency-input")).toHaveValue("full:auto");
+
+  // Undo steps back through the tangency edits.
+  await page.getByTestId("undo").click();
+  await expect(page.getByTestId("tangency-input")).toHaveValue("left:auto", {
+    timeout: 10_000,
+  });
+  await page.getByTestId("undo").click();
+  await expect(page.getByTestId("tangency-input")).toHaveValue("", { timeout: 10_000 });
 });

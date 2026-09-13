@@ -41,6 +41,11 @@ pub enum Patch {
         id: String,
         value: f64,
     },
+    /// Set or clear the wing's leading-edge tangency DSL.
+    SetLeTangency {
+        component_index: usize,
+        spec: Option<String>,
+    },
     SetStationField {
         component_index: usize,
         station_index: usize,
@@ -330,6 +335,73 @@ impl Engine {
         .map(Arc::new)
     }
 
+    /// Resolve the wing's leading-edge tangency DSL into unit tangent
+    /// vectors at the kink, using the evaluated station positions.
+    fn resolve_le_tangency(
+        &self,
+        component_index: usize,
+    ) -> Result<Option<aircraft_geom::wing::LeTangency>, Vec<Diagnostic>> {
+        let Some(Component::Wing(wing)) = self.doc.components.get(component_index) else {
+            return Err(vec![unknown_component(component_index)]);
+        };
+        let Some(tangency) = &wing.tangency else {
+            return Ok(None);
+        };
+        let dsl = aircraft_model::tangency::parse_le_tangency(&tangency.leading_edge)
+            .map_err(|diagnostic| vec![diagnostic])?;
+        let (_, stations) = self.evaluated_stations(component_index)?;
+        if stations.len() < 3 {
+            return Err(vec![Diagnostic::error(
+                Code::InvalidTangency,
+                "leading-edge tangency needs at least three stations (two panels)",
+            )]);
+        }
+        let le = |index: usize| stations[index].position;
+        let unit = |vector: [f64; 3]| -> [f64; 3] {
+            let length = aircraft_geom::mesh::vnorm(vector);
+            if length > 1e-9 {
+                aircraft_geom::mesh::vscale(vector, 1.0 / length)
+            } else {
+                [0.0; 3]
+            }
+        };
+        let d1 = unit(aircraft_geom::mesh::vsub(le(1), le(0)));
+        let d2 = unit(aircraft_geom::mesh::vsub(le(2), le(1)));
+        let mean = unit(aircraft_geom::mesh::vadd(d1, d2));
+        // When both sides are auto they meet on the mean of the two
+        // original directions; a single auto matches the other side's
+        // direction (explicit vector if present, else its straight sweep).
+        let both_auto = dsl.left == Some(aircraft_model::tangency::LeSide::Auto)
+            && dsl.right == Some(aircraft_model::tangency::LeSide::Auto);
+        let resolve = |side: Option<aircraft_model::tangency::LeSide>,
+                       other: Option<aircraft_model::tangency::LeSide>,
+                       own_straight: [f64; 3],
+                       other_straight: [f64; 3],
+                       mean: [f64; 3]| {
+            let _ = other_straight;
+            match side {
+                None => None,
+                Some(aircraft_model::tangency::LeSide::Vector(vector)) => Some(unit(vector)),
+                Some(aircraft_model::tangency::LeSide::Auto) => Some(match other {
+                    Some(aircraft_model::tangency::LeSide::Vector(vector)) => unit(vector),
+                    _ => {
+                        if both_auto {
+                            mean
+                        } else {
+                            own_straight
+                        }
+                    }
+                }),
+            }
+        };
+        let kink_end = resolve(dsl.left, dsl.right, d2, d1, mean);
+        let kink_start = resolve(dsl.right, dsl.left, d1, d2, mean);
+        Ok(Some(aircraft_geom::wing::LeTangency {
+            kink_end,
+            kink_start,
+        }))
+    }
+
     fn wing_symmetry_enabled(&self, component_index: usize) -> Result<bool, MeshJobError> {
         match &self.doc.components.get(component_index) {
             Some(Component::Wing(wing)) => Ok(wing.symmetry.enabled),
@@ -381,6 +453,9 @@ impl Engine {
         let (wing_id, stations) = self
             .evaluated_stations(component_index)
             .map_err(MeshJobError::Failed)?;
+        let le_tangency = self
+            .resolve_le_tangency(component_index)
+            .map_err(MeshJobError::Failed)?;
         let WingMesh { mesh, faces } = build_wing_mesh(
             &wing_id,
             &stations,
@@ -388,6 +463,7 @@ impl Engine {
             &resolved_geometry_quality(&stations, quality),
             symmetry_enabled && !full_model,
             full_model,
+            le_tangency,
         )
         .map_err(MeshJobError::Failed)?;
 
@@ -417,6 +493,11 @@ impl Engine {
         component_index.hash(&mut hasher);
         full_model.hash(&mut hasher);
         quality_key(quality).hash(&mut hasher);
+        if let Some(Component::Wing(wing)) = self.doc.components.get(component_index) {
+            if let Some(tangency) = &wing.tangency {
+                tangency.leading_edge.hash(&mut hasher);
+            }
+        }
         if let Ok((_, stations)) = self.evaluated_stations(component_index) {
             for station in &stations {
                 station.id.hash(&mut hasher);
@@ -462,6 +543,19 @@ fn apply_to_document(
                 .with_path(format!("parameters/{id}")));
             }
             doc.parameters.insert(id.clone(), *value);
+            Ok(())
+        }
+        Patch::SetLeTangency {
+            component_index,
+            spec,
+        } => {
+            let Component::Wing(wing) = doc
+                .components
+                .get_mut(*component_index)
+                .ok_or_else(|| unknown_component(*component_index))?;
+            wing.tangency = spec
+                .clone()
+                .map(|leading_edge| aircraft_model::aircraft::Tangency { leading_edge });
             Ok(())
         }
         Patch::AddParameter { id, value } => {
@@ -536,9 +630,9 @@ fn apply_to_document(
 /// Resolve a patch's seed nodes against a freshly built graph.
 fn resolve_seeds(graph: &Graph, patch: &Patch) -> Vec<usize> {
     match patch {
-        Patch::SetParameter { id, .. } | Patch::AddParameter { id, .. } => {
-            graph.parameter_node(id).into_iter().collect()
-        }
+        Patch::SetLeTangency { .. } => Vec::new(),
+        Patch::AddParameter { id, .. } => graph.parameter_node(id).into_iter().collect(),
+        Patch::SetParameter { id, .. } => graph.parameter_node(id).into_iter().collect(),
         Patch::SetStationField {
             component_index,
             station_index,

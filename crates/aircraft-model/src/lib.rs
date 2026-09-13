@@ -5,6 +5,7 @@ pub mod aircraft;
 pub mod diagnostic;
 pub mod schema;
 pub mod semantic;
+pub mod tangency;
 pub mod typed_value;
 pub mod units;
 

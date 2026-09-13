@@ -5,7 +5,7 @@
 //! local XZ (`y = 0`). A full model reflects it across local XZ and welds the
 //! centerline before any other consumer sees the mesh.
 
-use crate::mesh::Mesh;
+use crate::mesh::{lerp3, vadd, vnorm, vscale, vsub, Mesh};
 use crate::profile::ProfileCurve;
 use crate::quality::ResolvedQuality;
 use crate::section::{lerp_rings, Ring, StationSpec};
@@ -46,6 +46,66 @@ pub struct WingMesh {
     pub faces: Vec<FaceSource>,
 }
 
+/** Leading-edge tangency at the shared kink of the first two panels: the
+ * direction the LE curve leaves the kink with on each side. `kink_end`
+ * steers the inboard panel's end, `kink_start` the outboard panel's start;
+ * a side without a tangent keeps its straight sweep. */
+#[derive(Debug, Clone, Copy)]
+pub struct LeTangency {
+    pub kink_end: Option<[f64; 3]>,
+    pub kink_start: Option<[f64; 3]>,
+}
+
+/// Deviation of a tangent-constrained LE path from the straight chord line,
+/// evaluated at span fraction `t` of the panel. A quadratic Bézier serves a
+/// single-sided constraint; both sides together use a cubic so each end
+/// keeps its own tangent.
+fn le_offset(
+    a: [f64; 3],
+    b: [f64; 3],
+    t_start: Option<[f64; 3]>,
+    t_end: Option<[f64; 3]>,
+    t: f64,
+) -> [f64; 3] {
+    // Station rings are anchored: the offset is exactly zero at the panel
+    // ends (a t=1 bezier evaluation can be off by an ULP, which would break
+    // the bit-exact weld).
+    if t <= 0.0 || t >= 1.0 {
+        return [0.0; 3];
+    }
+    let straight = vscale(vsub(b, a), t);
+    match (t_start, t_end) {
+        (None, None) => [0.0; 3],
+        (Some(d0), Some(d1)) => {
+            let l = vnorm(vsub(b, a));
+            let p1 = vadd(a, vscale(d0, l * 0.4));
+            let p2 = vadd(b, vscale(d1, -l * 0.4));
+            let p3 = b;
+            // Cubic Bézier via de Casteljau.
+            let q0 = lerp3(a, p1, t);
+            let q1 = lerp3(p1, p2, t);
+            let q2 = lerp3(p2, p3, t);
+            let r0 = lerp3(q0, q1, t);
+            let r1 = lerp3(q1, q2, t);
+            vsub(lerp3(r0, r1, t), vadd(a, straight))
+        }
+        (Some(d0), None) => {
+            let l = vnorm(vsub(b, a));
+            let p1 = vadd(a, vscale(d0, l * 0.5));
+            let q0 = lerp3(a, p1, t);
+            let q1 = lerp3(p1, b, t);
+            vsub(lerp3(q0, q1, t), vadd(a, straight))
+        }
+        (None, Some(d1)) => {
+            let l = vnorm(vsub(b, a));
+            let p1 = vadd(b, vscale(d1, -l * 0.5));
+            let q0 = lerp3(a, p1, t);
+            let q1 = lerp3(p1, b, t);
+            vsub(lerp3(q0, q1, t), vadd(a, straight))
+        }
+    }
+}
+
 /// Build the wing mesh in wing-local coordinates.
 ///
 /// `root_cap` closes the symmetry plane of a standalone half model; a full
@@ -58,6 +118,7 @@ pub fn build_wing_mesh(
     quality: &ResolvedQuality,
     root_cap: bool,
     mirror: bool,
+    le_tangency: Option<LeTangency>,
 ) -> Result<WingMesh, Vec<Diagnostic>> {
     if stations.len() < 2 {
         return Err(vec![Diagnostic::error(
@@ -104,9 +165,30 @@ pub fn build_wing_mesh(
         let subdivisions = quality.span_subdivisions.get(panel).copied().unwrap_or(1);
         let lower = &base_rings[panel];
         let upper = &base_rings[panel + 1];
+        // Tangency (v0.2) shapes the first two panels: the inboard panel's
+        // end and the outboard panel's start meet at the shared kink.
+        let (t_start, t_end) = match le_tangency {
+            Some(le) if panel == 0 => (None, le.kink_end),
+            Some(le) if panel == 1 => (le.kink_start, None),
+            _ => (None, None),
+        };
+        let le_a = lower.points[0];
+        let le_b = upper.points[0];
         for step in 0..subdivisions {
-            let ring_lo = lerp_rings(lower, upper, step as f64 / subdivisions as f64);
-            let ring_hi = lerp_rings(lower, upper, (step + 1) as f64 / subdivisions as f64);
+            let t_lo = step as f64 / subdivisions as f64;
+            let t_hi = (step + 1) as f64 / subdivisions as f64;
+            let mut ring_lo = lerp_rings(lower, upper, t_lo);
+            let mut ring_hi = lerp_rings(lower, upper, t_hi);
+            if t_start.is_some() || t_end.is_some() {
+                let offset_lo = le_offset(le_a, le_b, t_start, t_end, t_lo);
+                let offset_hi = le_offset(le_a, le_b, t_start, t_end, t_hi);
+                for point in ring_lo.points.iter_mut() {
+                    *point = vadd(*point, offset_lo);
+                }
+                for point in ring_hi.points.iter_mut() {
+                    *point = vadd(*point, offset_hi);
+                }
+            }
             add_panel(&mut builder, &ring_lo, &ring_hi, panel, panel + 1, false);
         }
     }

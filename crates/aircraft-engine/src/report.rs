@@ -60,6 +60,13 @@ impl Engine {
                 None,
             )?;
             let volume = symmetry_enabled.then(|| volume_metrics(&artifact.mesh));
+            // Reference area from the mesh projection: exact for the faceted
+            // planform, so LE tangency curvature is fully accounted for (a
+            // station-trapezoid would ignore the curved leading edge). The
+            // upper and lower skins each project onto the same outline, so
+            // the closed-mesh sum counts the outline twice.
+            planform.reference_area.half = artifact.mesh.projected_area_xy() / 2.0;
+            planform.reference_area.full = 2.0 * planform.reference_area.half;
 
             let mesh_statistics = MeshStatistics {
                 vertices: artifact.mesh.vertex_count(),
