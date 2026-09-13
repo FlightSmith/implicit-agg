@@ -4,9 +4,11 @@
 
 pub mod mesh;
 pub mod metrics;
+pub mod nurbs;
 pub mod profile;
 pub mod quality;
 pub mod section;
+pub mod step_model;
 pub mod wing;
 
 pub use mesh::{Mesh, MeshValidation};

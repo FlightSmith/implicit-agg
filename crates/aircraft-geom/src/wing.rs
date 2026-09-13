@@ -46,6 +46,60 @@ pub struct WingMesh {
     pub faces: Vec<FaceSource>,
 }
 
+/** All subdivision rings in spanwise order (consecutive panels share their
+ * boundary ring exactly), with leading-edge tangency offsets baked in. The
+ * STEP exporter builds analytic surfaces from the same rows. */
+pub fn loft_rings(
+    stations: &[EvaluatedStation],
+    quality: &ResolvedQuality,
+    le_tangency: Option<LeTangency>,
+) -> Vec<Ring> {
+    let _ = le_tangency.as_ref().map(|le| le.strength);
+    let specs: Vec<StationSpec<'_>> = stations
+        .iter()
+        .map(|station| StationSpec {
+            id: station.id.clone(),
+            curve: &station.curve,
+            chord: station.chord,
+            twist: station.twist,
+            position: station.position,
+            trailing_edge: station.trailing_edge,
+        })
+        .collect();
+    let base_rings: Vec<Ring> = specs
+        .iter()
+        .map(|spec| spec.build_ring(quality.chord_samples))
+        .collect();
+
+    let mut rings: Vec<Ring> = Vec::new();
+    for panel in 0..stations.len() - 1 {
+        let subdivisions = quality.span_subdivisions.get(panel).copied().unwrap_or(1);
+        let lower = &base_rings[panel];
+        let upper = &base_rings[panel + 1];
+        let (t_start, t_end) = match le_tangency {
+            Some(le) if panel == 0 => (None, le.kink_end),
+            Some(le) if panel == 1 => (le.kink_start, None),
+            _ => (None, None),
+        };
+        let le_a = lower.points[0];
+        let le_b = upper.points[0];
+        let strength = le_tangency.map(|le| le.strength).unwrap_or(1.0);
+        for step in 0..subdivisions {
+            let t = step as f64 / subdivisions as f64;
+            let mut ring = lerp_rings(lower, upper, t);
+            if t_start.is_some() || t_end.is_some() {
+                let offset = le_offset(le_a, le_b, t_start, t_end, t, strength);
+                for point in ring.points.iter_mut() {
+                    *point = vadd(*point, offset);
+                }
+            }
+            rings.push(ring);
+        }
+    }
+    rings.push(base_rings[base_rings.len() - 1].clone());
+    rings
+}
+
 /** Leading-edge tangency at the shared kink of the first two panels: the
  * direction the LE curve leaves the kink with on each side. `kink_end`
  * steers the inboard panel's end, `kink_start` the outboard panel's start;
@@ -54,6 +108,10 @@ pub struct WingMesh {
 pub struct LeTangency {
     pub kink_end: Option<[f64; 3]>,
     pub kink_start: Option<[f64; 3]>,
+    /// Scales the Bezier control-point distance along the tangent — the
+    /// future tangency-strength control (1.0 = default fullness). Reserved:
+    /// the DSL and UI do not expose it yet.
+    pub strength: f64,
 }
 
 /// Deviation of a tangent-constrained LE path from the straight chord line,
@@ -66,6 +124,7 @@ fn le_offset(
     t_start: Option<[f64; 3]>,
     t_end: Option<[f64; 3]>,
     t: f64,
+    strength: f64,
 ) -> [f64; 3] {
     // Station rings are anchored: the offset is exactly zero at the panel
     // ends (a t=1 bezier evaluation can be off by an ULP, which would break
@@ -78,8 +137,8 @@ fn le_offset(
         (None, None) => [0.0; 3],
         (Some(d0), Some(d1)) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(a, vscale(d0, l * 0.4));
-            let p2 = vadd(b, vscale(d1, -l * 0.4));
+            let p1 = vadd(a, vscale(d0, l * 0.4 * strength));
+            let p2 = vadd(b, vscale(d1, -l * 0.4 * strength));
             let p3 = b;
             // Cubic Bézier via de Casteljau.
             let q0 = lerp3(a, p1, t);
@@ -91,14 +150,14 @@ fn le_offset(
         }
         (Some(d0), None) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(a, vscale(d0, l * 0.5));
+            let p1 = vadd(a, vscale(d0, l * 0.5 * strength));
             let q0 = lerp3(a, p1, t);
             let q1 = lerp3(p1, b, t);
             vsub(lerp3(q0, q1, t), vadd(a, straight))
         }
         (None, Some(d1)) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(b, vscale(d1, -l * 0.5));
+            let p1 = vadd(b, vscale(d1, -l * 0.5 * strength));
             let q0 = lerp3(a, p1, t);
             let q1 = lerp3(p1, b, t);
             vsub(lerp3(q0, q1, t), vadd(a, straight))
@@ -158,47 +217,26 @@ pub fn build_wing_mesh(
     }
 
     let k = quality.chord_samples;
-    let base_rings: Vec<Ring> = specs.iter().map(|spec| spec.build_ring(k)).collect();
+    let rings = loft_rings(stations, quality, le_tangency);
 
     let mut builder = RawBuilder::default();
+    let mut ring_index = 0usize;
     for panel in 0..stations.len() - 1 {
         let subdivisions = quality.span_subdivisions.get(panel).copied().unwrap_or(1);
-        let lower = &base_rings[panel];
-        let upper = &base_rings[panel + 1];
-        // Tangency (v0.2) shapes the first two panels: the inboard panel's
-        // end and the outboard panel's start meet at the shared kink.
-        let (t_start, t_end) = match le_tangency {
-            Some(le) if panel == 0 => (None, le.kink_end),
-            Some(le) if panel == 1 => (le.kink_start, None),
-            _ => (None, None),
-        };
-        let le_a = lower.points[0];
-        let le_b = upper.points[0];
-        for step in 0..subdivisions {
-            let t_lo = step as f64 / subdivisions as f64;
-            let t_hi = (step + 1) as f64 / subdivisions as f64;
-            let mut ring_lo = lerp_rings(lower, upper, t_lo);
-            let mut ring_hi = lerp_rings(lower, upper, t_hi);
-            if t_start.is_some() || t_end.is_some() {
-                let offset_lo = le_offset(le_a, le_b, t_start, t_end, t_lo);
-                let offset_hi = le_offset(le_a, le_b, t_start, t_end, t_hi);
-                for point in ring_lo.points.iter_mut() {
-                    *point = vadd(*point, offset_lo);
-                }
-                for point in ring_hi.points.iter_mut() {
-                    *point = vadd(*point, offset_hi);
-                }
-            }
-            add_panel(&mut builder, &ring_lo, &ring_hi, panel, panel + 1, false);
+        for _step in 0..subdivisions {
+            let ring_lo = &rings[ring_index];
+            let ring_hi = &rings[ring_index + 1];
+            add_panel(&mut builder, ring_lo, ring_hi, panel, panel + 1, false);
+            ring_index += 1;
         }
     }
 
     // Tip closure: flat cap over the outboard-most ring.
-    let tip_ring = base_rings[base_rings.len() - 1].clone();
+    let tip_ring = rings[rings.len() - 1].clone();
     add_tip_cap(&mut builder, &tip_ring, k, stations.len() - 1, false);
 
     if root_cap {
-        let root_ring = base_rings[0].clone();
+        let root_ring = rings[0].clone();
         add_root_cap(&mut builder, &root_ring, k);
     }
 

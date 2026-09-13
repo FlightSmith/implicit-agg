@@ -3,6 +3,8 @@
 //! Exporters are pure functions from a mesh to bytes; file writing stays with
 //! the caller. GLB output carries a documented Z-up to Y-up root rotation.
 
+pub mod step;
+
 use aircraft_geom::mesh::{cross, vsub};
 use aircraft_geom::Mesh;
 

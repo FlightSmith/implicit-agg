@@ -628,6 +628,7 @@ fn le_tangency_bends_the_inboard_panel_and_keeps_stations_anchored() {
     let tangency = aircraft_geom::wing::LeTangency {
         kink_end: Some(d2),
         kink_start: None, // right panel stays straight
+        strength: 1.0,
     };
 
     let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
@@ -683,6 +684,7 @@ fn le_tangency_meets_in_the_middle_when_both_sides_are_set() {
     let tangency = aircraft_geom::wing::LeTangency {
         kink_end: Some(vnormalize([0.35, -0.94, 0.05])),
         kink_start: Some(vnormalize([0.2, -0.97, 0.1])),
+        strength: 1.0,
     };
     let bent =
         build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();

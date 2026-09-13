@@ -265,6 +265,19 @@ impl WasmEngine {
             .expect("serializable result")
     }
 
+    /// Build the wing's analytic STEP document (text, metres).
+    pub fn export_step(
+        &mut self,
+        component_index: usize,
+        full_model: bool,
+    ) -> Result<String, JsValue> {
+        self.engine
+            .export_step(component_index, full_model, &CancellationToken::default())
+            .map_err(|error| {
+                serde_wasm_bindgen::to_value(&mesh_error_dto(&error)).expect("serializable")
+            })
+    }
+
     pub fn add_parameter(&mut self, id: &str, value: f64, transaction: u32) -> JsValue {
         let result = self.engine.apply_patch(
             Patch::AddParameter {

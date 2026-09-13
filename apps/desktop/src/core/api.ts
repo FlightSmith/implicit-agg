@@ -143,6 +143,8 @@ export interface CoreApi {
     spec: string | null,
     transaction: number,
   ): UpdateResultDto;
+  /** Analytic STEP document of the wing (text, metres). */
+  exportStep(componentIndex: number, fullModel: boolean): string;
   setStationField(
     componentIndex: number,
     stationIndex: number,

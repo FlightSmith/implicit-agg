@@ -248,3 +248,10 @@ test("LE tangency presets reflow the planform and undo reverts", async ({ page }
   await page.getByTestId("undo").click();
   await expect(page.getByTestId("tangency-input")).toHaveValue("", { timeout: 10_000 });
 });
+
+test("export STEP produces a download", async ({ page }) => {
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("export-step").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("wing.step");
+});

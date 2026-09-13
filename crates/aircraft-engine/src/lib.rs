@@ -399,7 +399,38 @@ impl Engine {
         Ok(Some(aircraft_geom::wing::LeTangency {
             kink_end,
             kink_start,
+            // Reserved for a future tangency-strength control.
+            strength: 1.0,
         }))
+    }
+
+    /// Build the wing's analytic STEP document (NURBS skins, planar caps).
+    pub fn export_step(
+        &self,
+        component_index: usize,
+        full: bool,
+        token: &CancellationToken,
+    ) -> Result<String, MeshJobError> {
+        if token.is_cancelled() {
+            return Err(MeshJobError::Cancelled);
+        }
+        let symmetry = self.wing_symmetry_enabled(component_index)?;
+        let le_tangency = self
+            .resolve_le_tangency(component_index)
+            .map_err(MeshJobError::Failed)?;
+        let (_, stations) = self
+            .evaluated_stations(component_index)
+            .map_err(MeshJobError::Failed)?;
+        let model = aircraft_geom::step_model::wing_model(
+            "wing",
+            &stations,
+            symmetry,
+            aircraft_geom::step_model::StepTolerances::default(),
+            le_tangency,
+            full,
+        )
+        .map_err(MeshJobError::Failed)?;
+        Ok(meshio::step::write_step(&model))
     }
 
     fn wing_symmetry_enabled(&self, component_index: usize) -> Result<bool, MeshJobError> {

@@ -93,6 +93,10 @@ export class WasmCore implements CoreApi {
     return this.engine.add_parameter(id, value, transaction) as UpdateResultDto;
   }
 
+  exportStep(componentIndex: number, fullModel: boolean): string {
+    return this.engine.export_step(componentIndex, fullModel) as string;
+  }
+
   setLeTangency(
     componentIndex: number,
     spec: string | null,

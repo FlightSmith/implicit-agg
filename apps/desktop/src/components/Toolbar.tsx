@@ -71,6 +71,16 @@ export function Toolbar() {
       >
         export GLB
       </button>
+      <button
+        disabled={!core}
+        data-testid="export-step"
+        onClick={() => {
+          const text = core!.exportStep(0, viewMode === "full");
+          download(new TextEncoder().encode(text), "wing.step", "application/step");
+        }}
+      >
+        export STEP
+      </button>
       <span className="toolbar-sep" />
       <button disabled={!core || undoDepth === 0} onClick={undo} data-testid="undo">
         undo
