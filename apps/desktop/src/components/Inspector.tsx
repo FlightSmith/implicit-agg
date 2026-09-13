@@ -10,12 +10,14 @@ import {
 } from "../core/controlPolicy";
 import type { FieldName, ValueMode } from "../core/types";
 import { typedValue } from "../core/types";
+import { ExpressionInput } from "./ExpressionInput";
 import { useWorkspace } from "../state/store";
 
 interface FieldProps {
   core: CoreApi;
   wingIndex: number;
   station: StationRow;
+  stations: WingStations[];
   field: FieldName;
   label: string;
   kind: string;
@@ -35,7 +37,7 @@ function currentMode(kind: string): ValueMode {
  * semantic validation remains the authority on physical validity.
  */
 function Field(props: FieldProps) {
-  const { core, wingIndex, station, field, label, kind, value, unit } = props;
+  const { core, wingIndex, station, stations, field, label, kind, value, unit } = props;
   const beginEdit = useWorkspace((s) => s.beginEdit);
   const endEdit = useWorkspace((s) => s.endEdit);
   const commit = useWorkspace((s) => s.commit);
@@ -222,12 +224,14 @@ function Field(props: FieldProps) {
 
       {mode === "expression" && (
         <div className="field-input">
-          <input
-            className="expression"
-            placeholder="= @station.root.position.x + 1"
+          <ExpressionInput
             value={formula}
-            onChange={(event) => setFormula(event.target.value)}
-            onBlur={() => {
+            parameters={core.parameters()}
+            stations={stations}
+            testId={`expression-${field}`}
+            placeholder="= @station.root.position.x + 1"
+            onChange={setFormula}
+            onCommit={() => {
               endEdit();
               if (formula.trim()) {
                 beginEdit();
@@ -235,10 +239,6 @@ function Field(props: FieldProps) {
                 endEdit();
               }
             }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") (event.target as HTMLInputElement).blur();
-            }}
-            data-testid={`expression-${field}`}
           />
           {kind === "expression" && (
             <span className="bound-value">evaluates to {value.toFixed(4)}</span>
@@ -289,6 +289,7 @@ export function Inspector() {
         core={core}
         wingIndex={wingIndex}
         station={station}
+        stations={stations}
         field="position.x"
         label="position x"
         kind={station.valueKinds.x}
@@ -299,6 +300,7 @@ export function Inspector() {
         core={core}
         wingIndex={wingIndex}
         station={station}
+        stations={stations}
         field="position.y"
         label="position y"
         kind={station.valueKinds.y}
@@ -309,6 +311,7 @@ export function Inspector() {
         core={core}
         wingIndex={wingIndex}
         station={station}
+        stations={stations}
         field="position.z"
         label="position z"
         kind={station.valueKinds.z}
@@ -319,6 +322,7 @@ export function Inspector() {
         core={core}
         wingIndex={wingIndex}
         station={station}
+        stations={stations}
         field="chord"
         label="chord"
         kind={station.valueKinds.chord}
@@ -329,6 +333,7 @@ export function Inspector() {
         core={core}
         wingIndex={wingIndex}
         station={station}
+        stations={stations}
         field="twist"
         label="twist"
         kind={station.valueKinds.twist}

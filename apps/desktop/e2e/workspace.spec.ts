@@ -170,3 +170,58 @@ test("typed values clamp to the catalog safety bounds", async ({ page }) => {
   // The catalog caps wing-section chords at 100 document units.
   await expect(input).toHaveValue(/^100$/, { timeout: 5_000 });
 });
+
+test("expression editor autocompletes @-references", async ({ page }) => {
+  await selectStation(page, "kink");
+  const chordField = page.locator(".field").filter({ hasText: "chord" }).first();
+  await chordField.getByRole("button", { name: "fx", exact: true }).click();
+  const expression = page.getByTestId("expression-chord");
+
+  // Pressing @ opens the candidate list.
+  await expression.fill("= @");
+  const popup = page.getByTestId("autocomplete");
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText("param.wing.rootChord");
+  await expect(popup).toContainText("station.kink.chord");
+  await expect(popup).toContainText("component.main-wing.interface.root-attachment");
+
+  // Typing filters the list.
+  await expression.press("p");
+  await expression.press("a");
+  await expression.press("r");
+  await expect(popup).toContainText("param.wing.rootChord");
+  const items = await page.getByTestId("autocomplete-item").count();
+  for (let i = 0; i < items; i++) {
+    const text = (await page.getByTestId("autocomplete-item").nth(i).textContent()) ?? "";
+    expect(text).toContain("param");
+  }
+
+  // Enter accepts the first match (parameters sort alphabetically, so that
+  // is wing.kinkChord) and closes the list.
+  await expression.press("Enter");
+  await expect(popup).toHaveCount(0);
+  await expect(expression).toHaveValue("= @param.wing.kinkChord");
+
+  // Committing rebinds kink chord to the same 1.15 value: no drift.
+  await expression.blur();
+  await expect(page.getByTestId("report")).toContainText("16.8370", { timeout: 5_000 });
+});
+
+test("autocomplete accepts a clicked station reference", async ({ page }) => {
+  await selectStation(page, "root");
+  const chordField = page.locator(".field").filter({ hasText: "chord" }).first();
+  await chordField.getByRole("button", { name: "fx", exact: true }).click();
+  const expression = page.getByTestId("expression-chord");
+  await expression.fill("= @station.ti");
+  const popup = page.getByTestId("autocomplete");
+  await expect(popup).toBeVisible();
+  // All remaining candidates are tip-station references.
+  const items = page.getByTestId("autocomplete-item");
+  await expect(items.first()).toContainText("station.tip");
+  await items.filter({ hasText: "station.tip.chord" }).first().click();
+  await expect(expression).toHaveValue("= @station.tip.chord");
+  // Root chord now follows the tip chord (0.42 m): the cascade shows up in
+  // the report.
+  await expression.blur();
+  await expect(page.getByTestId("report")).toContainText("5.7305", { timeout: 5_000 });
+});

@@ -180,6 +180,8 @@ struct ValueBindingsDto {
 #[serde(rename_all = "camelCase")]
 struct WingStationsDto {
     wing_id: String,
+    /// Interface names published by this wing, for expression autocomplete.
+    interfaces: Vec<String>,
     stations: Vec<StationRowDto>,
 }
 
@@ -330,8 +332,15 @@ impl WasmEngine {
                     })
                 })
                 .collect();
+            let interfaces = match doc.components.get(component_index) {
+                Some(aircraft_model::aircraft::Component::Wing(wing)) => {
+                    wing.interfaces.keys().cloned().collect()
+                }
+                _ => Vec::new(),
+            };
             wings.push(WingStationsDto {
                 wing_id,
+                interfaces,
                 stations: rows,
             });
         }

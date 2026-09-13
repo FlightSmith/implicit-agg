@@ -82,6 +82,8 @@ export interface StationRow {
 
 export interface WingStations {
   wingId: string;
+  /** Interface names published by this wing (autocomplete candidates). */
+  interfaces: string[];
   stations: StationRow[];
 }
 

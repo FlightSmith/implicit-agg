@@ -82,7 +82,7 @@ export class WasmCore implements CoreApi {
   }
 
   parameters(): Record<string, number> {
-    return this.engine.parameters() as Record<string, number>;
+    return toPlain(this.engine.parameters()) as Record<string, number>;
   }
 
   setParameter(id: string, value: number, transaction: number): UpdateResultDto {
