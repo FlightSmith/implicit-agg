@@ -40,8 +40,12 @@ pub struct ResolvedQuality {
     pub span_subdivisions: Vec<usize>,
 }
 
-const INTERACTIVE_CHORD_SAMPLES: usize = 24;
-const INTERACTIVE_SPAN_SUBDIVISIONS: usize = 4;
+const INTERACTIVE_CHORD_SAMPLES: usize = 48;
+/// Spanwise stations per model semispan for the interactive tier; each
+/// panel's subdivision count is its share of that budget.
+pub const INTERACTIVE_STATIONS_PER_SPAN: f64 = 20.0;
+const INTERACTIVE_MIN_SUBDIVISIONS: usize = 4;
+const INTERACTIVE_MAX_SUBDIVISIONS: usize = 24;
 // The square-root leading-edge singularity makes chordal sag decay as ~1/k,
 // so tight tolerances need genuinely large sample counts.
 const CHORD_SAMPLE_LADDER: [usize; 13] =
@@ -58,10 +62,25 @@ pub fn resolve_quality(
 ) -> ResolvedQuality {
     let panels = panel_span_lengths.len();
     match *quality {
-        MeshQuality::Interactive => ResolvedQuality {
-            chord_samples: INTERACTIVE_CHORD_SAMPLES,
-            span_subdivisions: vec![INTERACTIVE_SPAN_SUBDIVISIONS; panels],
-        },
+        MeshQuality::Interactive => {
+            // Dense enough for close-ups: curvature regions (LE nose, tip
+            // cap, TE wedge) need spanwise stations, not just chord samples.
+            let total_span: f64 = panel_span_lengths.iter().sum();
+            ResolvedQuality {
+                chord_samples: INTERACTIVE_CHORD_SAMPLES,
+                span_subdivisions: panel_span_lengths
+                    .iter()
+                    .map(|&span| {
+                        if span <= 0.0 || total_span <= 0.0 {
+                            INTERACTIVE_MIN_SUBDIVISIONS
+                        } else {
+                            ((INTERACTIVE_STATIONS_PER_SPAN * span / total_span).round() as usize)
+                                .clamp(INTERACTIVE_MIN_SUBDIVISIONS, INTERACTIVE_MAX_SUBDIVISIONS)
+                        }
+                    })
+                    .collect(),
+            }
+        }
         MeshQuality::Export(tolerances) => {
             let chord_samples = tolerances
                 .max_chordal_deviation

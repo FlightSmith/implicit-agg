@@ -477,12 +477,27 @@ fn export_quality_resolves_chord_samples_from_deviation() {
 }
 
 #[test]
-fn interactive_quality_is_small() {
+fn interactive_quality_scales_span_stations_with_panel_share() {
     let curve = naca("0012");
-    let quality = resolve_quality(&[&curve], &[2.0], &[0.0], &MeshQuality::Interactive);
-    assert_eq!(quality.chord_samples, 24);
-    assert_eq!(quality.span_subdivisions[0], 4);
+    // A single panel spanning the whole model gets the full station budget.
+    let single = resolve_quality(&[&curve], &[2.0], &[0.0], &MeshQuality::Interactive);
+    assert_eq!(single.chord_samples, 48);
+    assert_eq!(
+        single.span_subdivisions[0],
+        INTERACTIVE_STATIONS_PER_SPAN.round() as usize
+    );
+    // Two equal panels split the budget.
+    let split = resolve_quality(
+        &[&curve],
+        &[2.0, 2.0],
+        &[0.0, 0.0],
+        &MeshQuality::Interactive,
+    );
+    assert_eq!(split.span_subdivisions[0], 10);
+    assert_eq!(split.span_subdivisions[1], 10);
 }
+
+use aircraft_geom::quality::INTERACTIVE_STATIONS_PER_SPAN;
 
 #[test]
 fn degenerate_wings_are_rejected() {

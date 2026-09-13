@@ -514,6 +514,15 @@ fn field_kind_from_str(field: &str) -> Option<FieldKind> {
 fn quality_from_str(quality: &str) -> Result<aircraft_geom::quality::MeshQuality, JsValue> {
     match quality {
         "interactive" => Ok(aircraft_geom::quality::MeshQuality::Interactive),
+        // The auto-settle tier: finer than the drag preview, cheaper than a
+        // full export run.
+        "settled" => Ok(aircraft_geom::quality::MeshQuality::Export(
+            aircraft_geom::quality::ExportTolerances {
+                max_chordal_deviation: Some(2.5e-3),
+                max_edge_length: Some(0.6),
+                max_normal_angle_deg: Some(10.0),
+            },
+        )),
         "export" => Ok(aircraft_geom::quality::MeshQuality::Export(
             aircraft_geom::quality::ExportTolerances::default(),
         )),

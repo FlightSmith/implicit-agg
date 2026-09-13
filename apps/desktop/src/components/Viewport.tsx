@@ -38,6 +38,7 @@ export function Viewport() {
   const refs = useRef<SceneRefs | null>(null);
   const mesh = useWorkspace((s) => s.mesh);
   const meshPending = useWorkspace((s) => s.meshPending);
+  const meshTier = useWorkspace((s) => s.meshTier);
   const viewMode = useWorkspace((s) => s.viewMode);
   const traceTriangle = useWorkspace((s) => s.trace?.triangleIndex ?? -1);
   const documentId = useWorkspace((s) => s.meta?.id);
@@ -331,6 +332,9 @@ export function Viewport() {
         )}
         <span className="hud-item">grid = 1 m · X aft · Z up</span>
         <span className="hud-item hint">double-click: set orbit pivot</span>
+        <span className="hud-item" data-testid="mesh-tier">
+          {meshTier === "settled" ? "settled tessellation" : "draft tessellation"}
+        </span>
         {meshPending && (
           <span className="hud-item pending" data-testid="mesh-pending">
             recomputing…

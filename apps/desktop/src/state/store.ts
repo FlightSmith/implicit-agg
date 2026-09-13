@@ -18,8 +18,16 @@ import type { DiagnosticDto } from "../core/types";
 
 export type BottomTab = "report" | "trace" | "diagnostics";
 
+export interface TraceFace {
+  kind: "panel" | "tipCap" | "rootCap";
+  lowerStation: number | null;
+  upperStation: number | null;
+  mirrored: boolean;
+}
+
 export interface TraceState {
   triangleIndex: number;
+  face: TraceFace;
   wingId: string;
   stations: string[];
   mirrored: boolean;
@@ -39,6 +47,7 @@ interface WorkspaceState {
   report: AircraftReport | null;
   mesh: MeshDto | null;
   meshPending: boolean;
+  meshTier: "draft" | "settled";
   viewMode: "half" | "full";
   quality: MeshQuality;
   selectedStation: number;
@@ -54,6 +63,8 @@ interface WorkspaceState {
   loadDocument(json: string): Promise<void>;
   refresh(): void;
   requestMesh(): void;
+  scheduleSettle(): void;
+  remapTrace(mesh: MeshDto): void;
   setViewMode(mode: "half" | "full"): void;
   setQuality(quality: MeshQuality): void;
   selectStation(wing: number, station: number): void;
@@ -67,7 +78,13 @@ interface WorkspaceState {
 }
 
 let meshTimer: ReturnType<typeof setTimeout> | null = null;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
 let editInProgress = false;
+
+function clearSettle() {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = null;
+}
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   ready: false,
@@ -82,6 +99,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   report: null,
   mesh: null,
   meshPending: false,
+  meshTier: "draft",
   viewMode: "full",
   quality: "interactive",
   selectedStation: 0,
@@ -144,12 +162,24 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const core = get().core;
     if (!core) return;
     if (meshTimer) clearTimeout(meshTimer);
+    clearSettle();
     set({ meshPending: true });
     // Let the pending state paint before the (synchronous) recompute.
     meshTimer = setTimeout(() => {
       try {
-        const mesh = core.mesh(get().quality, get().viewMode === "full");
-        set({ mesh, meshPending: false });
+        const quality = get().quality;
+        const mesh = core.mesh(quality, get().viewMode === "full");
+        set({
+          mesh,
+          meshPending: false,
+          meshTier: quality === "interactive" ? "draft" : "settled",
+        });
+        get().remapTrace(mesh);
+        // docs/06: once the view rests, refine the draft into the settled,
+        // export-quality tessellation.
+        if (quality === "interactive") {
+          get().scheduleSettle();
+        }
       } catch (error) {
         const failure = isMeshFailure(error);
         const diagnostics = failure?.diagnostics ?? [];
@@ -160,6 +190,42 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         }
       }
     }, 80);
+  },
+
+  /** Refine the resting preview to export-quality tessellation. */
+  scheduleSettle() {
+    clearSettle();
+    settleTimer = setTimeout(() => {
+      const core = get().core;
+      if (!core) return;
+      set({ meshPending: true });
+      setTimeout(() => {
+        try {
+          const mesh = core.mesh("settled", get().viewMode === "full");
+          set({ mesh, meshPending: false, meshTier: "settled" });
+          get().remapTrace(mesh);
+        } catch {
+          // The draft mesh remains on display.
+          set({ meshPending: false });
+        }
+      }, 20);
+    }, 700);
+  },
+
+  /** Keep the selection highlight attached to the same feature when the
+   * tessellation changes under it. */
+  remapTrace(mesh: MeshDto) {
+    const trace = get().trace;
+    if (!trace) return;
+    const face = trace.face;
+    const index = mesh.faces.findIndex(
+      (candidate) =>
+        candidate.kind === face.kind &&
+        candidate.lowerStation === face.lowerStation &&
+        candidate.upperStation === face.upperStation &&
+        candidate.mirrored === face.mirrored,
+    );
+    set({ trace: { ...trace, triangleIndex: index >= 0 ? index : -1 } });
   },
 
   setViewMode(mode) {
@@ -178,12 +244,21 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   selectTrace(triangleIndex) {
     const core = get().core;
-    if (!core) return;
+    const mesh = get().mesh;
+    if (!core || !mesh) return;
+    const face = mesh.faces[triangleIndex];
+    if (!face) return;
     try {
       const source = core.trace(triangleIndex, get().viewMode === "full");
       set({
         trace: {
           triangleIndex,
+          face: {
+            kind: face.kind,
+            lowerStation: face.lowerStation,
+            upperStation: face.upperStation,
+            mirrored: face.mirrored,
+          },
           wingId: source.wingId,
           stations: source.stations,
           mirrored: source.mirrored,

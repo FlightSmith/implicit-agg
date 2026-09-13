@@ -67,13 +67,34 @@ test("a dimension error is reported and the last valid state is kept", async ({ 
   await expect(page.getByTestId("report")).toContainText("16.8370");
 });
 
-test("half and full models differ in triangle count", async ({ page }) => {
+test("preview settles to dense tessellation; half is coarser than full", async ({
+  page,
+}) => {
   const viewport = page.getByTestId("viewport");
-  await expect(viewport).toContainText("1590 triangles");
+  // The resting draft refines into the settled tessellation automatically.
+  await expect(viewport.getByTestId("mesh-tier")).toContainText("settled", {
+    timeout: 10_000,
+  });
+  const settledFull = await triangleCount(viewport);
+
   await page.getByTestId("view-half").click();
-  await expect(viewport).toContainText("840 triangles", { timeout: 5_000 });
   await expect(viewport).toContainText("half model");
+  await expect(viewport.getByTestId("mesh-tier")).toContainText("settled", {
+    timeout: 10_000,
+  });
+  const settledHalf = await triangleCount(viewport);
+
+  expect(settledHalf).toBeGreaterThan(0);
+  expect(settledFull).toBeGreaterThan(settledHalf * 1.5);
 });
+
+async function triangleCount(
+  viewport: ReturnType<import("@playwright/test").Page["getByTestId"]>,
+): Promise<number> {
+  const text = await viewport.locator(".hud-item").nth(1).textContent();
+  const match = text?.match(/(\d+) triangles/);
+  return Number(match?.[1] ?? 0);
+}
 
 test("clicking the mesh traces the picked panel to its stations", async ({ page }) => {
   const canvas = page.locator("canvas.viewport-canvas");

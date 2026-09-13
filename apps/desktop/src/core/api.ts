@@ -20,7 +20,7 @@ export interface UpdateResultDto {
   affected: string[];
 }
 
-export type MeshQuality = "interactive" | "export";
+export type MeshQuality = "interactive" | "settled" | "export";
 
 export interface FaceDto {
   kind: "panel" | "tipCap" | "rootCap";
