@@ -104,9 +104,19 @@ body {
 
 .workspace {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: 220px 5px 1fr 5px 330px;
   flex: 1;
   min-height: 0;
+}
+
+.splitter {
+  cursor: col-resize;
+  background: var(--border);
+  touch-action: none;
+}
+
+.splitter:hover {
+  background: var(--accent);
 }
 
 .tree {
@@ -185,6 +195,10 @@ body {
   padding: 2px 8px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.hud-item.hint {
+  color: #6b7c93;
 }
 
 .hud-item.pending {

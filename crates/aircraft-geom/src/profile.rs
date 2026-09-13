@@ -58,10 +58,11 @@ impl ProfileCurve {
             lower.push([x + yt * theta.sin(), yc - yt * theta.cos()]);
         }
 
-        Ok(ProfileCurve {
-            upper: enforce_monotonic(upper),
-            lower: enforce_monotonic(lower),
-        })
+        let mut upper = enforce_monotonic(upper);
+        let mut lower = enforce_monotonic(lower);
+        normalize_te(&mut upper, &mut lower);
+
+        Ok(ProfileCurve { upper, lower })
     }
 
     /// Build a profile from normalized coordinate points, applying lossless
@@ -137,8 +138,9 @@ impl ProfileCurve {
             (backward_le_to_te, forward)
         };
 
-        let upper = enforce_monotonic(upper);
-        let lower = enforce_monotonic(lower);
+        let mut upper = enforce_monotonic(upper);
+        let mut lower = enforce_monotonic(lower);
+        normalize_te(&mut upper, &mut lower);
         if upper.len() < 2 || lower.len() < 2 {
             return Err(Diagnostic::error(
                 Code::InvalidProfile,
@@ -230,6 +232,23 @@ pub fn cosine_samples(k: usize) -> Vec<f64> {
     (0..k)
         .map(|j| (1.0 - (std::f64::consts::PI * j as f64 / (k - 1) as f64).cos()) / 2.0)
         .collect()
+}
+
+/// Scale both surfaces so the trailing edge sits at exactly x = 1. The
+/// contract says coordinates are fractions of chord with the TE near 1; a
+/// shared normalization keeps closure vertices, sampling, and the sharp-TE
+/// mean consistent.
+fn normalize_te(upper: &mut [[f64; 2]], lower: &mut [[f64; 2]]) {
+    let x_max = upper
+        .last()
+        .map(|p| p[0])
+        .unwrap_or(1.0)
+        .max(lower.last().map(|p| p[0]).unwrap_or(1.0));
+    if x_max > 0.0 && (x_max - 1.0).abs() > 1e-12 {
+        for point in upper.iter_mut().chain(lower.iter_mut()) {
+            point[0] /= x_max;
+        }
+    }
 }
 
 fn mean_y(points: &[[f64; 2]]) -> f64 {

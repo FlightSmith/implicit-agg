@@ -41,7 +41,7 @@ pub struct ResolvedQuality {
 }
 
 const INTERACTIVE_CHORD_SAMPLES: usize = 24;
-const INTERACTIVE_SPAN_SUBDIVISIONS: usize = 2;
+const INTERACTIVE_SPAN_SUBDIVISIONS: usize = 4;
 // The square-root leading-edge singularity makes chordal sag decay as ~1/k,
 // so tight tolerances need genuinely large sample counts.
 const CHORD_SAMPLE_LADDER: [usize; 13] =

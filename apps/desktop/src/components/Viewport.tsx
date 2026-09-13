@@ -15,6 +15,24 @@ interface SceneRefs {
 
 const HIGHLIGHT = new THREE.Color("#ff7043");
 
+/** A small text sprite for gizmo axis labels. */
+function axisLabel(text: string, color: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d")!;
+  context.font = "bold 44px sans-serif";
+  context.fillStyle = color;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, 32, 34);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }),
+  );
+  sprite.scale.setScalar(0.42);
+  return sprite;
+}
+
 export function Viewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const refs = useRef<SceneRefs | null>(null);
@@ -35,15 +53,24 @@ export function Viewport() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // The logarithmic depth buffer keeps the thin trailing-edge wedge free
+    // of z-fighting at close range.
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      logarithmicDepthBuffer: true,
+    });
     renderer.setClearColor(0x11151c);
+    renderer.autoClear = false;
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 5000);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 5000);
     camera.position.set(14, -12, 9);
     camera.up.set(0, 0, 1);
 
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
+    controls.rotateSpeed = 0.9;
+    controls.zoomToCursor = true;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const key = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -70,23 +97,64 @@ export function Viewport() {
     const grid = new THREE.GridHelper(40, 40, 0x2a3b4d, 0x1c2836);
     scene.add(grid);
 
-    const picking = (event: MouseEvent) => {
+    // Orientation gizmo: miniature aircraft axes rendered in the
+    // lower-right corner, oriented with the main camera.
+    const gizmoScene = new THREE.Scene();
+    const gizmoCamera = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 10);
+    gizmoCamera.up = camera.up;
+    const gizmoAxis = (direction: THREE.Vector3, color: number, label: string) => {
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        direction.clone().multiplyScalar(-0.7),
+        direction.clone().multiplyScalar(1.0),
+      ]);
+      gizmoScene.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color })));
+      const tip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 12, 12),
+        new THREE.MeshBasicMaterial({ color }),
+      );
+      tip.position.copy(direction.clone().multiplyScalar(1.0));
+      gizmoScene.add(tip);
+      const sprite = axisLabel(label, `#${color.toString(16).padStart(6, "0")}`);
+      sprite.position.copy(direction.clone().multiplyScalar(1.35));
+      gizmoScene.add(sprite);
+    };
+    gizmoAxis(new THREE.Vector3(1, 0, 0), 0xe06c5a, "X");
+    gizmoAxis(new THREE.Vector3(0, 1, 0), 0x7aa25c, "Y");
+    gizmoAxis(new THREE.Vector3(0, 0, 1), 0x4fc3f7, "Z");
+
+    const raycaster = new THREE.Raycaster();
+    const castAt = (event: MouseEvent) => {
       const current = refs.current;
-      if (!current?.mesh) return;
+      if (!current?.mesh) return null;
       const bounds = canvas.getBoundingClientRect();
       const pointer = new THREE.Vector2(
         ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
         -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
       );
-      const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(pointer, current.camera);
-      const hits = raycaster.intersectObject(current.mesh, false);
-      const faceIndex = hits[0]?.faceIndex;
+      return raycaster.intersectObject(current.mesh, false)[0] ?? null;
+    };
+
+    const picking = (event: MouseEvent) => {
+      const hit = castAt(event);
+      const faceIndex = hit?.faceIndex;
       if (faceIndex !== undefined && faceIndex !== null) {
         useWorkspace.getState().selectTrace(faceIndex);
       }
     };
     canvas.addEventListener("click", picking);
+
+    // Double-click re-targets the orbit pivot onto the picked surface
+    // point, so close-up inspection rotates around what is on screen.
+    const setPivot = (event: MouseEvent) => {
+      const hit = castAt(event);
+      const current = refs.current;
+      if (hit && current) {
+        current.controls.target.copy(hit.point);
+        current.controls.update();
+      }
+    };
+    canvas.addEventListener("dblclick", setPivot);
 
     const resize = () => {
       const width = canvas.clientWidth || 1;
@@ -102,7 +170,25 @@ export function Viewport() {
     let frame = 0;
     const loop = () => {
       controls.update();
+      renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
+      renderer.clear();
       renderer.render(scene, camera);
+      const gizmoSize = 96;
+      const margin = 10;
+      renderer.setViewport(
+        canvas.clientWidth - gizmoSize - margin,
+        margin,
+        gizmoSize,
+        gizmoSize,
+      );
+      renderer.clearDepth();
+      gizmoCamera.position
+        .copy(camera.position)
+        .sub(controls.target)
+        .normalize()
+        .multiplyScalar(4);
+      gizmoCamera.lookAt(0, 0, 0);
+      renderer.render(gizmoScene, gizmoCamera);
       frame = requestAnimationFrame(loop);
     };
     loop();
@@ -116,10 +202,13 @@ export function Viewport() {
       symmetryPlane,
       picking,
     };
+    // Debugging affordance: drive the camera from tests and probes.
+    (window as unknown as Record<string, unknown>).__viewportRefs = refs;
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       canvas.removeEventListener("click", picking);
+      canvas.removeEventListener("dblclick", setPivot);
       controls.dispose();
       renderer.dispose();
       refs.current = null;
@@ -190,22 +279,20 @@ export function Viewport() {
     }
   }, [mesh]);
 
-  // Highlight the traced triangle with a small marker.
+  // Highlight the traced triangle with a translucent filled overlay.
   useEffect(() => {
     const current = refs.current;
     if (!current || !mesh) return;
     const markerName = "trace-marker";
-    const previous = current.scene.getObjectByName(markerName) as THREE.Line | null;
+    const previous = current.scene.getObjectByName(markerName) as THREE.Mesh | null;
     if (previous) {
       current.scene.remove(previous);
       previous.geometry.dispose();
     }
     if (traceTriangle < 0 || traceTriangle * 3 + 2 >= mesh.indices.length) return;
-    const a = mesh.indices[traceTriangle * 3];
-    const b = mesh.indices[traceTriangle * 3 + 1];
-    const c = mesh.indices[traceTriangle * 3 + 2];
     const points: THREE.Vector3[] = [];
-    for (const index of [a, b, c, a]) {
+    for (let corner = 0; corner < 3; corner++) {
+      const index = mesh.indices[traceTriangle * 3 + corner];
       points.push(
         new THREE.Vector3(
           mesh.vertices[index * 3],
@@ -214,12 +301,22 @@ export function Viewport() {
         ),
       );
     }
-    const line = new THREE.Line(
+    const overlay = new THREE.Mesh(
       new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color: HIGHLIGHT }),
+      new THREE.MeshBasicMaterial({
+        color: HIGHLIGHT,
+        transparent: true,
+        opacity: 0.65,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      }),
     );
-    line.name = markerName;
-    current.scene.add(line);
+    overlay.name = markerName;
+    overlay.renderOrder = 1;
+    current.scene.add(overlay);
   }, [traceTriangle, mesh]);
 
   return (
@@ -232,6 +329,8 @@ export function Viewport() {
             {mesh.indices.length / 3} triangles · r{mesh.revision}
           </span>
         )}
+        <span className="hud-item">grid = 1 m · X aft · Z up</span>
+        <span className="hud-item hint">double-click: set orbit pivot</span>
         {meshPending && (
           <span className="hud-item pending" data-testid="mesh-pending">
             recomputing…

@@ -69,9 +69,9 @@ test("a dimension error is reported and the last valid state is kept", async ({ 
 
 test("half and full models differ in triangle count", async ({ page }) => {
   const viewport = page.getByTestId("viewport");
-  await expect(viewport).toContainText("838 triangles");
+  await expect(viewport).toContainText("1590 triangles");
   await page.getByTestId("view-half").click();
-  await expect(viewport).toContainText("464 triangles", { timeout: 5_000 });
+  await expect(viewport).toContainText("840 triangles", { timeout: 5_000 });
   await expect(viewport).toContainText("half model");
 });
 

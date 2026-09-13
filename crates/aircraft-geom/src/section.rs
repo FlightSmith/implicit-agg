@@ -114,24 +114,83 @@ impl StationSpec<'_> {
     fn closed_polygon(&self, k: usize) -> Vec<[f64; 2]> {
         let xs = cosine_samples(k);
         let thickness = self.trailing_edge_thickness();
-        let te_mean = (self.curve.sample_upper(1.0) + self.curve.sample_lower(1.0)) / 2.0;
         let mut polygon: Vec<[f64; 2]> = Vec::with_capacity(2 * k);
         for (j, &x) in xs.iter().enumerate() {
             let y = if j + 1 == k {
-                te_mean + thickness / 2.0
+                self.closure_upper(thickness)
             } else {
-                self.curve.sample_upper(x)
+                self.surface_upper(x, thickness)
             };
             polygon.push([x, y]);
         }
         // Trailing-edge lower vertex, then the lower surface back to the LE.
         if thickness > 0.0 {
-            polygon.push([1.0, te_mean - thickness / 2.0]);
+            polygon.push([1.0, self.closure_lower(thickness)]);
         }
         for &x in xs.iter().take(k - 1).skip(1).rev() {
-            polygon.push([x, self.curve.sample_lower(x)]);
+            polygon.push([x, self.surface_lower(x, thickness)]);
         }
         polygon
+    }
+
+    /// Natural gap between the surfaces at chordwise fraction `x`.
+    fn natural_gap(&self, x: f64) -> f64 {
+        self.curve.sample_upper(x) - self.curve.sample_lower(x)
+    }
+
+    /// Trailing-edge closure weight: 0 ahead of the flare zone, easing to 1
+    /// at the trailing edge (smoothstep over the aft 15% of chord).
+    fn flare_weight(&self, x: f64) -> f64 {
+        const FLARE_START: f64 = 0.85;
+        let x_te = self.curve.x_te();
+        if x_te <= FLARE_START || x < FLARE_START {
+            return 0.0;
+        }
+        let w = ((x - FLARE_START) / (x_te - FLARE_START)).clamp(0.0, 1.0);
+        w * w * (3.0 - 2.0 * w)
+    }
+
+    /// Upper-surface ordinate at `x` with the requested closure blended in.
+    ///
+    /// The closure never notches into the profile: when the requested gap
+    /// exceeds the natural gap, the excess is flared smoothly over the aft
+    /// zone; when it is smaller, the natural surface is kept (a closure
+    /// thinner than the natural trailing edge is what `Sharp` is for).
+    fn surface_upper(&self, x: f64, thickness: f64) -> f64 {
+        let base = self.curve.sample_upper(x);
+        if thickness <= 0.0 {
+            return base;
+        }
+        let excess = (thickness - self.natural_gap(x)).max(0.0);
+        base + excess * self.flare_weight(x) / 2.0
+    }
+
+    fn surface_lower(&self, x: f64, thickness: f64) -> f64 {
+        let base = self.curve.sample_lower(x);
+        if thickness <= 0.0 {
+            return base;
+        }
+        let excess = (thickness - self.natural_gap(x)).max(0.0);
+        base - excess * self.flare_weight(x) / 2.0
+    }
+
+    /// The trailing-edge closure ordinate on the upper surface. A sharp
+    /// closure collapses to the mean line; a blunt one sits on the flared
+    /// surface with exactly the requested gap.
+    fn closure_upper(&self, thickness: f64) -> f64 {
+        if thickness <= 0.0 {
+            let x_te = self.curve.x_te();
+            return (self.curve.sample_upper(x_te) + self.curve.sample_lower(x_te)) / 2.0;
+        }
+        self.surface_upper(1.0, thickness)
+    }
+
+    fn closure_lower(&self, thickness: f64) -> f64 {
+        if thickness <= 0.0 {
+            let x_te = self.curve.x_te();
+            return (self.curve.sample_upper(x_te) + self.curve.sample_lower(x_te)) / 2.0;
+        }
+        self.surface_lower(1.0, thickness)
     }
 
     /// Sample the station into a placed 3D ring with `k` chord samples per
@@ -139,20 +198,19 @@ impl StationSpec<'_> {
     pub fn build_ring(&self, k: usize) -> Ring {
         let xs = cosine_samples(k);
         let thickness = self.trailing_edge_thickness();
-        let te_mean = (self.curve.sample_upper(1.0) + self.curve.sample_lower(1.0)) / 2.0;
 
         let mut ring: Vec<[f64; 3]> = Vec::with_capacity(2 * k);
         for (j, &x) in xs.iter().enumerate() {
             let y = if j + 1 == k {
-                te_mean + thickness / 2.0
+                self.closure_upper(thickness)
             } else {
-                self.curve.sample_upper(x)
+                self.surface_upper(x, thickness)
             };
             ring.push(self.place([x, y]));
         }
-        ring.push(self.place([1.0, te_mean - thickness / 2.0]));
+        ring.push(self.place([1.0, self.closure_lower(thickness)]));
         for &x in xs.iter().take(k - 1).rev() {
-            ring.push(self.place([x, self.curve.sample_lower(x)]));
+            ring.push(self.place([x, self.surface_lower(x, thickness)]));
         }
         Ring { points: ring }
     }

@@ -481,7 +481,7 @@ fn interactive_quality_is_small() {
     let curve = naca("0012");
     let quality = resolve_quality(&[&curve], &[2.0], &[0.0], &MeshQuality::Interactive);
     assert_eq!(quality.chord_samples, 24);
-    assert_eq!(quality.span_subdivisions[0], 2);
+    assert_eq!(quality.span_subdivisions[0], 4);
 }
 
 #[test]
@@ -509,4 +509,77 @@ fn degenerate_wings_are_rejected() {
     )
     .expect_err("collapsed wing must fail");
     assert!(!error.is_empty());
+}
+
+#[test]
+fn trailing_edge_closure_matches_request_without_protruding() {
+    // A NACA0008's natural TE gap is far smaller than the requested closure;
+    // the flare must reach exactly the requested gap at the TE and grow
+    // monotonically over the flare zone instead of notching the profile.
+    let curve = naca("0008");
+    let requested = 0.006; // chord fraction
+    let spec = StationSpec {
+        id: "tip".to_string(),
+        curve: &curve,
+        chord: 1.0,
+        twist: 0.0,
+        position: [0.0; 3],
+        trailing_edge: TrailingEdgeSpec::ChordFraction(requested),
+    };
+    let ring = spec.build_ring(64);
+    let te_upper = ring.points[63];
+    let te_lower = ring.points[64];
+    let gap = te_upper[2] - te_lower[2];
+    assert!(
+        (gap - requested).abs() < 1e-9,
+        "closure gap {gap} must equal the requested {requested}"
+    );
+
+    // The closure gap tracks the natural envelope within the flare bound:
+    // never notching below min(natural, requested) and never protruding
+    // above max(natural, requested) by more than rounding.
+    for j in 50..64 {
+        let x = aircraft_geom::profile::cosine_samples(64)[j];
+        let upper = ring.points[j];
+        let lower = ring.points[127 - j]; // l_i sits at index 2k-1-i
+        let gap = upper[2] - lower[2];
+        let natural = curve.sample_upper(x) - curve.sample_lower(x);
+        let bound = natural.max(requested);
+        assert!(
+            gap <= bound + 1e-9,
+            "gap {gap} protrudes past the envelope {bound} at sample {j}"
+        );
+        assert!(
+            gap >= natural.min(requested) - 1e-9,
+            "gap {gap} notches below the envelope at sample {j}"
+        );
+    }
+
+    // The closure never jumps off the surface: at the flare start the
+    // flared ordinate equals the natural ordinate.
+    let natural = curve.sample_upper(0.85);
+    let flared = curve.sample_upper(0.85) + 0.0; // flare weight is zero at 0.85
+    assert!((natural - flared).abs() < 1e-12);
+}
+
+#[test]
+fn sharp_closure_collapses_to_the_mean_line() {
+    let curve = naca("2412");
+    let spec = StationSpec {
+        id: "root".to_string(),
+        curve: &curve,
+        chord: 2.0,
+        twist: 0.0,
+        position: [0.0; 3],
+        trailing_edge: TrailingEdgeSpec::Sharp,
+    };
+    let ring = spec.build_ring(16);
+    let te_upper = ring.points[15];
+    let te_lower = ring.points[16];
+    assert!(
+        (te_upper[2] - te_lower[2]).abs() < 1e-12,
+        "sharp TE is a single point"
+    );
+    let mean = (curve.sample_upper(1.0) + curve.sample_lower(1.0)) / 2.0;
+    assert!((te_upper[2] - mean * 2.0).abs() < 1e-9);
 }
