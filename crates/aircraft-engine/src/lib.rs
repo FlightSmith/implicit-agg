@@ -376,7 +376,7 @@ impl Engine {
         let resolve_kink = |side: Option<aircraft_model::tangency::Spec>,
                             other: Option<aircraft_model::tangency::Spec>,
                             own_straight: [f64; 3]| {
-            let Some(spec) = side else { return None };
+            let spec = side?;
             let direction = if spec.auto {
                 match other {
                     Some(other) if !other.auto => {

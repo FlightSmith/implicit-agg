@@ -773,7 +773,6 @@ fn tangency_strength_scales_the_bulge_and_zero_removes_it() {
     ];
     let quality = uniform_quality(3, 32, 4);
     let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
-    let straight_mid = le_x_band(&straight.mesh, -1.6, 1e-6);
 
     let build = |strength: f64| {
         let tangency = aircraft_geom::wing::LeTangency {
