@@ -809,10 +809,3 @@ fn tangency_strength_scales_the_bulge_and_zero_removes_it() {
     assert!(weak.mesh.vertices != strong.mesh.vertices);
 }
 
-fn le_x_band(mesh: &aircraft_geom::Mesh, y: f64, band: f64) -> f64 {
-    mesh.vertices
-        .iter()
-        .filter(|v| (v[1] - y).abs() < band)
-        .map(|v| v[0])
-        .fold(f64::INFINITY, f64::min)
-}
