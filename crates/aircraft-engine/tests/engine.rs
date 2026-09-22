@@ -303,6 +303,37 @@ fn incremental_evaluation_matches_the_full_oracle() {
 }
 
 #[test]
+fn root_tangency_changes_the_le_departure_at_the_root_only() {
+    let mut engine = engine();
+    let token = CancellationToken::default();
+    let before = engine.evaluated_stations(0).unwrap().1;
+
+    let result = engine.apply_patch(
+        Patch::SetLeTangency {
+            component_index: 0,
+            spec: Some("root:0.55,-0.83,0".into()),
+        },
+        TransactionId(30),
+    );
+    assert!(result.committed, "diagnostics: {:?}", result.diagnostics);
+
+    // Station positions are untouched; the shape change lives in the mesh.
+    let after = engine.evaluated_stations(0).unwrap().1;
+    assert_eq!(before[0].position, after[0].position);
+
+    let mesh = engine
+        .wing_mesh(0, MeshQuality::Interactive, true, &token, None)
+        .unwrap();
+    // The near-root LE moved (x grew aft), while the tip LE stayed put.
+    let root_le_moved = mesh
+        .mesh
+        .vertices
+        .iter()
+        .any(|v| v[0] > 0.25 && v[1] > -1.0);
+    assert!(root_le_moved, "LE near the root must swing aft");
+}
+
+#[test]
 fn document_round_trip_reopens_identically() {
     let (doc, _) = parse_document(EXAMPLE).unwrap();
     let serialized = serde_json::to_string_pretty(&doc).unwrap();

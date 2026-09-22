@@ -319,7 +319,7 @@ function WingTangency({
       <div className="field-input">
         <input
           className="expression"
-          placeholder="left:auto;right:0.8,0,0.1"
+          placeholder="root:0.9,-0.3,0;left:auto;right:0.8,0,0.1"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commitDraft}

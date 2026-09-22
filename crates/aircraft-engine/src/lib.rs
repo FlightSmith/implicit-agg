@@ -368,22 +368,20 @@ impl Engine {
         let d1 = unit(aircraft_geom::mesh::vsub(le(1), le(0)));
         let d2 = unit(aircraft_geom::mesh::vsub(le(2), le(1)));
         let mean = unit(aircraft_geom::mesh::vadd(d1, d2));
-        // When both sides are auto they meet on the mean of the two
+        // When both panel sides are auto they meet on the mean of the two
         // original directions; a single auto matches the other side's
         // direction (explicit vector if present, else its straight sweep).
-        let both_auto = dsl.left == Some(aircraft_model::tangency::LeSide::Auto)
-            && dsl.right == Some(aircraft_model::tangency::LeSide::Auto);
-        let resolve = |side: Option<aircraft_model::tangency::LeSide>,
-                       other: Option<aircraft_model::tangency::LeSide>,
-                       own_straight: [f64; 3],
-                       other_straight: [f64; 3],
-                       mean: [f64; 3]| {
-            let _ = other_straight;
-            match side {
-                None => None,
-                Some(aircraft_model::tangency::LeSide::Vector(vector)) => Some(unit(vector)),
-                Some(aircraft_model::tangency::LeSide::Auto) => Some(match other {
-                    Some(aircraft_model::tangency::LeSide::Vector(vector)) => unit(vector),
+        let both_auto =
+            dsl.left.map(|s| s.auto).unwrap_or(false) && dsl.right.map(|s| s.auto).unwrap_or(false);
+        let resolve_kink = |side: Option<aircraft_model::tangency::Spec>,
+                            other: Option<aircraft_model::tangency::Spec>,
+                            own_straight: [f64; 3]| {
+            let Some(spec) = side else { return None };
+            let direction = if spec.auto {
+                match other {
+                    Some(other) if !other.auto => {
+                        unit(other.vector.expect("vector spec carries its vector"))
+                    }
                     _ => {
                         if both_auto {
                             mean
@@ -391,16 +389,31 @@ impl Engine {
                             own_straight
                         }
                     }
-                }),
-            }
+                }
+            } else {
+                unit(spec.vector.expect("vector spec carries its vector"))
+            };
+            Some(aircraft_geom::wing::Tangent {
+                direction,
+                strength: spec.strength,
+            })
         };
-        let kink_end = resolve(dsl.left, dsl.right, d2, d1, mean);
-        let kink_start = resolve(dsl.right, dsl.left, d1, d2, mean);
+        let kink_end = resolve_kink(dsl.left, dsl.right, d2);
+        let kink_start = resolve_kink(dsl.right, dsl.left, d1);
+        let station_tangent = |spec: Option<aircraft_model::tangency::Spec>| {
+            spec.map(|spec| {
+                let vector = spec.vector.expect("station tangency requires a vector");
+                aircraft_geom::wing::Tangent {
+                    direction: unit(vector),
+                    strength: spec.strength,
+                }
+            })
+        };
         Ok(Some(aircraft_geom::wing::LeTangency {
+            root_start: station_tangent(dsl.root),
             kink_end,
             kink_start,
-            // Reserved for a future tangency-strength control.
-            strength: 1.0,
+            tip_end: station_tangent(dsl.tip),
         }))
     }
 

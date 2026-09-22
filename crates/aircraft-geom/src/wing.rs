@@ -54,7 +54,6 @@ pub fn loft_rings(
     quality: &ResolvedQuality,
     le_tangency: Option<LeTangency>,
 ) -> Vec<Ring> {
-    let _ = le_tangency.as_ref().map(|le| le.strength);
     let specs: Vec<StationSpec<'_>> = stations
         .iter()
         .map(|station| StationSpec {
@@ -76,19 +75,21 @@ pub fn loft_rings(
         let subdivisions = quality.span_subdivisions.get(panel).copied().unwrap_or(1);
         let lower = &base_rings[panel];
         let upper = &base_rings[panel + 1];
+        // Panel 0 carries the root departure and the kink arrival; panel 1
+        // the kink departure and the tip arrival. Later panels (v0.2: only
+        // the first two are shapeable) stay straight.
         let (t_start, t_end) = match le_tangency {
-            Some(le) if panel == 0 => (None, le.kink_end),
-            Some(le) if panel == 1 => (le.kink_start, None),
+            Some(le) if panel == 0 => (le.root_start, le.kink_end),
+            Some(le) if panel == 1 => (le.kink_start, le.tip_end),
             _ => (None, None),
         };
         let le_a = lower.points[0];
         let le_b = upper.points[0];
-        let strength = le_tangency.map(|le| le.strength).unwrap_or(1.0);
         for step in 0..subdivisions {
             let t = step as f64 / subdivisions as f64;
             let mut ring = lerp_rings(lower, upper, t);
             if t_start.is_some() || t_end.is_some() {
-                let offset = le_offset(le_a, le_b, t_start, t_end, t, strength);
+                let offset = le_offset(le_a, le_b, t_start, t_end, t);
                 for point in ring.points.iter_mut() {
                     *point = vadd(*point, offset);
                 }
@@ -104,14 +105,25 @@ pub fn loft_rings(
  * direction the LE curve leaves the kink with on each side. `kink_end`
  * steers the inboard panel's end, `kink_start` the outboard panel's start;
  * a side without a tangent keeps its straight sweep. */
+/// One tangent constraint: a unit direction plus its strength (which scales
+/// the Bezier control distance along the direction; 0 = straight panel,
+/// 1 = default fullness).
+#[derive(Debug, Clone, Copy)]
+pub struct Tangent {
+    pub direction: [f64; 3],
+    pub strength: f64,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct LeTangency {
-    pub kink_end: Option<[f64; 3]>,
-    pub kink_start: Option<[f64; 3]>,
-    /// Scales the Bezier control-point distance along the tangent — the
-    /// future tangency-strength control (1.0 = default fullness). Reserved:
-    /// the DSL and UI do not expose it yet.
-    pub strength: f64,
+    /// Departure tangent at the root section (start of the inboard panel).
+    pub root_start: Option<Tangent>,
+    /// Arrival tangent at the kink for the inboard panel's end.
+    pub kink_end: Option<Tangent>,
+    /// Departure tangent at the kink for the outboard panel's start.
+    pub kink_start: Option<Tangent>,
+    /// Arrival tangent at the tip section (end of the outboard panel).
+    pub tip_end: Option<Tangent>,
 }
 
 /// Deviation of a tangent-constrained LE path from the straight chord line,
@@ -121,15 +133,26 @@ pub struct LeTangency {
 fn le_offset(
     a: [f64; 3],
     b: [f64; 3],
-    t_start: Option<[f64; 3]>,
-    t_end: Option<[f64; 3]>,
+    t_start: Option<crate::wing::Tangent>,
+    t_end: Option<crate::wing::Tangent>,
     t: f64,
-    strength: f64,
 ) -> [f64; 3] {
+    let control_scale = |tangent: &Tangent, base: f64| base * tangent.strength;
     // Station rings are anchored: the offset is exactly zero at the panel
     // ends (a t=1 bezier evaluation can be off by an ULP, which would break
     // the bit-exact weld).
     if t <= 0.0 || t >= 1.0 {
+        return [0.0; 3];
+    }
+    // A zero strength must reproduce the straight panel exactly: collapsed
+    // controls on a quadratic sag the panel away from the straight line (and
+    // a doubly-collapsed cubic overshoots it), so shortcut to no tangency.
+    let start_strength = t_start.map(|t| t.strength);
+    let end_strength = t_end.map(|t| t.strength);
+    if start_strength == Some(0.0)
+        || end_strength == Some(0.0)
+        || (start_strength == Some(0.0) && end_strength == Some(0.0))
+    {
         return [0.0; 3];
     }
     let straight = vscale(vsub(b, a), t);
@@ -137,8 +160,8 @@ fn le_offset(
         (None, None) => [0.0; 3],
         (Some(d0), Some(d1)) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(a, vscale(d0, l * 0.4 * strength));
-            let p2 = vadd(b, vscale(d1, -l * 0.4 * strength));
+            let p1 = vadd(a, vscale(d0.direction, control_scale(&d0, l * 0.4)));
+            let p2 = vadd(b, vscale(d1.direction, -control_scale(&d1, l * 0.4)));
             let p3 = b;
             // Cubic Bézier via de Casteljau.
             let q0 = lerp3(a, p1, t);
@@ -150,14 +173,14 @@ fn le_offset(
         }
         (Some(d0), None) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(a, vscale(d0, l * 0.5 * strength));
+            let p1 = vadd(a, vscale(d0.direction, control_scale(&d0, l * 0.5)));
             let q0 = lerp3(a, p1, t);
             let q1 = lerp3(p1, b, t);
             vsub(lerp3(q0, q1, t), vadd(a, straight))
         }
         (None, Some(d1)) => {
             let l = vnorm(vsub(b, a));
-            let p1 = vadd(b, vscale(d1, -l * 0.5 * strength));
+            let p1 = vadd(b, vscale(d1.direction, -control_scale(&d1, l * 0.5)));
             let q0 = lerp3(a, p1, t);
             let q1 = lerp3(p1, b, t);
             vsub(lerp3(q0, q1, t), vadd(a, straight))

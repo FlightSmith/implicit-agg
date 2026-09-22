@@ -303,10 +303,7 @@ pub fn wing_model(
         // Mirror the four surface faces (skip the root cap: the symmetry
         // plane gets one shared cap face) into a second half-shell, then
         // close with the root cap — one shell, one solid.
-        let mirrored_faces: Vec<StepFaceDef> = model.faces[..3]
-            .iter()
-            .map(mirror_face)
-            .collect();
+        let mirrored_faces: Vec<StepFaceDef> = model.faces[..3].iter().map(mirror_face).collect();
         for face in &mirrored_faces {
             model.faces.push(face.clone());
         }

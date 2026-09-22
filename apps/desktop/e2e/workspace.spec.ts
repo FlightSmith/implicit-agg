@@ -255,3 +255,18 @@ test("export STEP produces a download", async ({ page }) => {
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("wing.step");
 });
+
+test("root tangency steers the LE departure at the root", async ({ page }) => {
+  await expect(page.getByTestId("mesh-tier")).toContainText("settled", {
+    timeout: 15_000,
+  });
+  const input = page.getByTestId("tangency-input");
+  await input.fill("root:0.55,-0.83,0");
+  await input.blur();
+  await expect(input).toHaveValue("root:0.55,-0.83,0", { timeout: 10_000 });
+
+  // The near-root LE swung aft: the report's reference area drops (the
+  // root chord region narrows), and undo reverts everything.
+  await page.getByTestId("undo").click();
+  await expect(page.getByTestId("tangency-input")).toHaveValue("", { timeout: 10_000 });
+});

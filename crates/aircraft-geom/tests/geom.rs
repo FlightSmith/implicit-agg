@@ -626,9 +626,13 @@ fn le_tangency_bends_the_inboard_panel_and_keeps_stations_anchored() {
         stations[1].position,
     ));
     let tangency = aircraft_geom::wing::LeTangency {
-        kink_end: Some(d2),
+        root_start: None,
+        kink_end: Some(aircraft_geom::wing::Tangent {
+            direction: d2,
+            strength: 1.0,
+        }),
         kink_start: None, // right panel stays straight
-        strength: 1.0,
+        tip_end: None,
     };
 
     let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
@@ -682,9 +686,16 @@ fn le_tangency_meets_in_the_middle_when_both_sides_are_set() {
     // Explicit vectors on both sides: each panel bends toward its vector.
     // Realistic LE tangents are dominated by the spanwise run.
     let tangency = aircraft_geom::wing::LeTangency {
-        kink_end: Some(vnormalize([0.35, -0.94, 0.05])),
-        kink_start: Some(vnormalize([0.2, -0.97, 0.1])),
-        strength: 1.0,
+        root_start: None,
+        kink_end: Some(aircraft_geom::wing::Tangent {
+            direction: vnormalize([0.35, -0.94, 0.05]),
+            strength: 1.0,
+        }),
+        kink_start: Some(aircraft_geom::wing::Tangent {
+            direction: vnormalize([0.2, -0.97, 0.1]),
+            strength: 1.0,
+        }),
+        tip_end: None,
     };
     let bent =
         build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();
@@ -693,4 +704,116 @@ fn le_tangency_meets_in_the_middle_when_both_sides_are_set() {
     // Both panels now bulge: the straight reference has less projected area.
     let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
     assert!(bent.mesh.projected_area_xy() > straight.mesh.projected_area_xy());
+}
+
+#[test]
+fn root_departure_tangent_bends_the_le_at_the_root_only() {
+    let curve = naca("0012");
+    let stations = vec![
+        station("root", &curve, [0.0, 0.0, 0.0], 1.5),
+        station("kink", &curve, [0.8, -3.2, 0.1], 1.15),
+        station("tip", &curve, [2.2, -7.3, 0.45], 0.42),
+    ];
+    let quality = uniform_quality(3, 32, 4);
+    // The user's case: a departure direction at the root section. A mostly
+    // aft-pointing tangent (in the original straight direction) pushes the
+    // near-root LE aft; the kink and outboard panel are untouched.
+    let tangency = aircraft_geom::wing::LeTangency {
+        root_start: Some(aircraft_geom::wing::Tangent {
+            direction: vnormalize([0.55, -0.83, 0.0]),
+            strength: 1.0,
+        }),
+        kink_end: None,
+        kink_start: None,
+        tip_end: None,
+    };
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
+    let bent =
+        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();
+    assert!(bent.mesh.validate().is_sound() && bent.mesh.validate().closed);
+
+    // The tangency also shifts ring spanwise positions, so measure the LE
+    // at the bent mesh's own first intermediate ring y. The straight-line
+    // LE x at that station is 0.8 · |y| / 3.2; the bent LE must sit aft of
+    // it (the tangent sweeps harder than the straight panel).
+    let le_x = |mesh: &aircraft_geom::Mesh, y: f64, band: f64| -> f64 {
+        mesh.vertices
+            .iter()
+            .filter(|v| (v[1] - y).abs() < band)
+            .map(|v| v[0])
+            .fold(f64::INFINITY, f64::min)
+    };
+    let bent_ring_y = bent
+        .mesh
+        .vertices
+        .iter()
+        .map(|v| v[1].abs())
+        .filter(|&y| y > 0.05 && y < 3.0)
+        .fold(f64::INFINITY, f64::min);
+    assert!(bent_ring_y.is_finite());
+    let line_x = 0.8 * bent_ring_y / 3.2;
+    let bent_le = le_x(&bent.mesh, -bent_ring_y, 0.02);
+    assert!(
+        bent_le > line_x + 0.02,
+        "near-root LE must swing aft: {bent_le} vs straight-line {line_x}"
+    );
+    // The kink stays anchored: the inboard panel's far end is unchanged.
+    assert!((le_x(&bent.mesh, -3.2, 1e-6) - le_x(&straight.mesh, -3.2, 1e-6)).abs() < 1e-9);
+    // The outboard panel is untouched.
+    assert!((le_x(&straight.mesh, -5.25, 1e-6) - le_x(&bent.mesh, -5.25, 1e-6)).abs() < 1e-9);
+}
+
+#[test]
+fn tangency_strength_scales_the_bulge_and_zero_removes_it() {
+    let curve = naca("0012");
+    let stations = vec![
+        station("root", &curve, [0.0, 0.0, 0.0], 1.5),
+        station("kink", &curve, [0.8, -3.2, 0.1], 1.15),
+        station("tip", &curve, [2.2, -7.3, 0.45], 0.42),
+    ];
+    let quality = uniform_quality(3, 32, 4);
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
+    let straight_mid = le_x_band(&straight.mesh, -1.6, 1e-6);
+
+    let build = |strength: f64| {
+        let tangency = aircraft_geom::wing::LeTangency {
+            root_start: None,
+            kink_end: Some(aircraft_geom::wing::Tangent {
+                direction: vnormalize([0.35, -0.94, 0.05]),
+                strength,
+            }),
+            kink_start: None,
+            tip_end: None,
+        };
+        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap()
+    };
+
+    let zero = build(0.0);
+    let weak = build(0.5);
+    let strong = build(2.0);
+
+    // Strength 0 degenerates to the straight panel, bit for bit.
+    assert_eq!(zero.mesh.vertices, straight.mesh.vertices);
+    // Non-zero strengths shape the panel: some mid-panel LE vertex moves off
+    // the straight line (which direction depends on the tangent, so assert
+    // difference, not direction).
+    let differs = |mesh: &aircraft_geom::wing::WingMesh| {
+        mesh.mesh
+            .vertices
+            .iter()
+            .zip(&straight.mesh.vertices)
+            .any(|(a, b)| (a[0] - b[0]).abs() > 1e-9)
+    };
+    assert!(differs(&weak), "strength 0.5 must shape the panel");
+    assert!(differs(&strong), "strength 2 must shape the panel");
+    // And the shaped meshes still differ from each other.
+    assert!(weak.mesh.vertices != strong.mesh.vertices);
+}
+
+fn le_x_band(mesh: &aircraft_geom::Mesh, y: f64, band: f64) -> f64 {
+    mesh.vertices
+        .iter()
+        .filter(|v| (v[1] - y).abs() < band)
+        .map(|v| v[0])
+        .fold(f64::INFINITY, f64::min)
 }
