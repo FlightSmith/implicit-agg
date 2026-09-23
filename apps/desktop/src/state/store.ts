@@ -310,6 +310,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const state = get();
     const previous = state.undoStack[state.undoStack.length - 1];
     if (!previous || !state.core) return;
+    // Snapshot the live state for redo, then revert to the previous
+    // snapshot. Exactly one restore per undo.
     const current = state.core.snapshot();
     state.core.restore(previous);
     set({

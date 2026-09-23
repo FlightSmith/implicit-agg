@@ -226,45 +226,45 @@ test("autocomplete accepts a clicked station reference", async ({ page }) => {
   await expect(page.getByTestId("report")).toContainText("5.7279", { timeout: 5_000 });
 });
 
-test("kink arrival tangency reflows the planform and undo reverts", async ({ page }) => {
-  const report = page.getByTestId("report");
-  await expect(report.getByTestId === undefined ? report : report).toContainText(/16\.8\d/, {
-    timeout: 15_000,
-  });
-
-  // Select the kink station and give its arrival (right) side a tangent.
-  await page.locator(".tree-station").filter({ hasText: "kink" }).first().click();
-  const rightDirection = page.getByTestId("tangency-right-direction");
-  await expect(rightDirection).toBeVisible({ timeout: 5_000 });
-  await rightDirection.fill("0.35,-0.94,0.05");
-  await rightDirection.blur();
-
-  await expect(report).not.toContainText("16.8299", { timeout: 10_000 });
-
-  // Undo reverts the station tangency entirely.
-  await page.getByTestId("undo").click();
-  await expect(page.getByTestId("tangency-right-direction")).toHaveValue("", {
-    timeout: 10_000,
-  });
-  await expect(report).toContainText("16.8299", { timeout: 10_000 });
-});
-
-test("root departure tangency steers the LE at the root", async ({ page }) => {
+test("kink tangency text field: auto, vectors, strength", async ({ page }) => {
   const report = page.getByTestId("report");
   await expect(report).toContainText(/16\.8\d/, { timeout: 15_000 });
 
-  // Select the root station; only the departure (left) side is offered.
-  await page.locator(".tree-station").filter({ hasText: "root" }).first().click();
-  await expect(page.getByTestId("tangency-left-direction")).toBeVisible();
-  await expect(page.getByTestId("tangency-right-direction")).toHaveCount(0);
+  await page.locator(".tree-station").filter({ hasText: "kink" }).first().click();
+  const input = page.getByTestId("tangency-input");
 
-  const leftDirection = page.getByTestId("tangency-left-direction");
-  await leftDirection.fill("0.55,-0.83,0");
-  await leftDirection.blur();
+  // Explicit arrival vector: reshapes the planform.
+  await input.fill("right:0.35,-0.94,0.05");
+  await input.blur();
+  await expect(report).not.toContainText("16.8299", { timeout: 10_000 });
+
+  // Both sides auto: smooth kink on the mean of the two panel sweeps. On
+  // this gentle kink the resulting planform happens to land near baseline.
+  await input.fill("left:auto;right:auto");
+  await input.blur();
+  await expect(input).toHaveValue("left:auto;right:auto");
+
+  // Each blur is one committed edit: the first undo reverts the last blur
+  // (back to the arrival vector), the second removes the tangency entirely.
+  await page.getByTestId("undo").click();
+  await expect(input).toHaveValue("right:0.35,-0.94,0.05", { timeout: 10_000 });
+  await page.getByTestId("undo").click();
+  await expect(input).toHaveValue("", { timeout: 10_000 });
+  await expect(page.getByTestId("report")).toContainText("16.8299", { timeout: 10_000 });
+});
+
+test("root departure tangency steers the LE at the root", async ({ page }) => {
+  await page.locator(".tree-station").filter({ hasText: "root" }).first().click();
+  await expect(page.getByTestId("tangency-left-direction")).toHaveCount(0);
+  const input = page.getByTestId("tangency-input");
+
+  // left on the root = departure direction of the LE at the root section.
+  await input.fill("left:0.55,-0.83,0:0.7");
+  await input.blur();
   await expect(page.getByTestId("report")).not.toContainText("16.8299", { timeout: 10_000 });
 
-  // Undo reverts.
   await page.getByTestId("undo").click();
+  await expect(input).toHaveValue("", { timeout: 10_000 });
   await expect(page.getByTestId("report")).toContainText("16.8299", { timeout: 10_000 });
 });
 

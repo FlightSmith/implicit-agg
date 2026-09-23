@@ -394,7 +394,16 @@ impl Engine {
                                 (unit(o.direction.expect("validated direction")), o.strength)
                             }
                             _ if both_auto(other) => {
-                                (mean(panel_dir[i - 1], panel_dir[i]), left.strength)
+                                // i == 0 (root): no inboard sweep — own straight.
+                                let d_in = panel_dir.get(i.wrapping_sub(1)).copied();
+                                match (d_in, panel_dir.get(i).copied()) {
+                                    (Some(a), Some(b)) => (mean(a, b), left.strength),
+                                    (None, Some(b)) => (b, left.strength),
+                                    pair => (
+                                        pair.0.unwrap_or(pair.1.unwrap_or([0.0; 3])),
+                                        left.strength,
+                                    ),
+                                }
                             }
                             _ => (panel_dir[i], left.strength),
                         }
@@ -420,7 +429,7 @@ impl Engine {
                                 (unit(o.direction.expect("validated direction")), o.strength)
                             }
                             _ if both_auto(other) => {
-                                (mean(panel_dir[i - 2], panel_dir[i - 1]), right.strength)
+                                (mean(panel_dir[i - 1], panel_dir[i]), right.strength)
                             }
                             _ => (panel_dir[i - 1], right.strength),
                         }
