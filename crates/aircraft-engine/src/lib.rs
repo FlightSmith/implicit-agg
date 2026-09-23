@@ -41,10 +41,11 @@ pub enum Patch {
         id: String,
         value: f64,
     },
-    /// Set or clear the wing's leading-edge tangency DSL.
-    SetLeTangency {
+    /// Set or clear a station's leading-edge tangency.
+    SetStationTangency {
         component_index: usize,
-        spec: Option<String>,
+        station_index: usize,
+        tangency: Option<aircraft_model::StationTangency>,
     },
     SetStationField {
         component_index: usize,
@@ -335,28 +336,20 @@ impl Engine {
         .map(Arc::new)
     }
 
-    /// Resolve the wing's leading-edge tangency DSL into unit tangent
-    /// vectors at the kink, using the evaluated station positions.
-    fn resolve_le_tangency(
+    /// Resolve per-panel tangencies from the stations' tangency specs.
+    /// Panel `i` (station i → i+1) departs with station i's `left` and
+    /// arrives with station i+1's `right`. `auto` on a kink side adopts the
+    /// other side's direction if explicit, else the mean of the two panel
+    /// sweeps when both are auto, else its own straight sweep (no-op).
+    fn resolve_panel_tangencies(
         &self,
         component_index: usize,
-    ) -> Result<Option<aircraft_geom::wing::LeTangency>, Vec<Diagnostic>> {
+    ) -> Result<Vec<aircraft_geom::wing::PanelTangency>, Vec<Diagnostic>> {
         let Some(Component::Wing(wing)) = self.doc.components.get(component_index) else {
             return Err(vec![unknown_component(component_index)]);
         };
-        let Some(tangency) = &wing.tangency else {
-            return Ok(None);
-        };
-        let dsl = aircraft_model::tangency::parse_le_tangency(&tangency.leading_edge)
-            .map_err(|diagnostic| vec![diagnostic])?;
         let (_, stations) = self.evaluated_stations(component_index)?;
-        if stations.len() < 3 {
-            return Err(vec![Diagnostic::error(
-                Code::InvalidTangency,
-                "leading-edge tangency needs at least three stations (two panels)",
-            )]);
-        }
-        let le = |index: usize| stations[index].position;
+        let count = stations.len();
         let unit = |vector: [f64; 3]| -> [f64; 3] {
             let length = aircraft_geom::mesh::vnorm(vector);
             if length > 1e-9 {
@@ -365,56 +358,86 @@ impl Engine {
                 [0.0; 3]
             }
         };
-        let d1 = unit(aircraft_geom::mesh::vsub(le(1), le(0)));
-        let d2 = unit(aircraft_geom::mesh::vsub(le(2), le(1)));
-        let mean = unit(aircraft_geom::mesh::vadd(d1, d2));
-        // When both panel sides are auto they meet on the mean of the two
-        // original directions; a single auto matches the other side's
-        // direction (explicit vector if present, else its straight sweep).
-        let both_auto =
-            dsl.left.map(|s| s.auto).unwrap_or(false) && dsl.right.map(|s| s.auto).unwrap_or(false);
-        let resolve_kink = |side: Option<aircraft_model::tangency::Spec>,
-                            other: Option<aircraft_model::tangency::Spec>,
-                            own_straight: [f64; 3]| {
-            let spec = side?;
-            let direction = if spec.auto {
-                match other {
-                    Some(other) if !other.auto => {
-                        unit(other.vector.expect("vector spec carries its vector"))
-                    }
-                    _ => {
-                        if both_auto {
-                            mean
-                        } else {
-                            own_straight
-                        }
-                    }
-                }
-            } else {
-                unit(spec.vector.expect("vector spec carries its vector"))
+        let panel_dir: Vec<[f64; 3]> = (0..count.saturating_sub(1))
+            .map(|i| {
+                unit(aircraft_geom::mesh::vsub(
+                    stations[i + 1].position,
+                    stations[i].position,
+                ))
+            })
+            .collect();
+
+        let mean = |a: [f64; 3], b: [f64; 3]| unit(aircraft_geom::mesh::vadd(a, b));
+        let mut panels =
+            vec![aircraft_geom::wing::PanelTangency::default(); count.saturating_sub(1)];
+
+        for (i, station) in wing.stations.iter().enumerate() {
+            let Some(tangency) = &station.tangency else {
+                continue;
             };
-            Some(aircraft_geom::wing::Tangent {
-                direction,
-                strength: spec.strength,
-            })
-        };
-        let kink_end = resolve_kink(dsl.left, dsl.right, d2);
-        let kink_start = resolve_kink(dsl.right, dsl.left, d1);
-        let station_tangent = |spec: Option<aircraft_model::tangency::Spec>| {
-            spec.map(|spec| {
-                let vector = spec.vector.expect("station tangency requires a vector");
-                aircraft_geom::wing::Tangent {
-                    direction: unit(vector),
-                    strength: spec.strength,
+            fn other_side(
+                side: &Option<aircraft_model::StationTangencySide>,
+            ) -> Option<&aircraft_model::StationTangencySide> {
+                side.as_ref()
+            }
+            let both_auto = |other: Option<&aircraft_model::StationTangencySide>| {
+                other.map(|s| s.auto).unwrap_or(false)
+            };
+
+            // left: departure on panel i (toward station i+1).
+            if let Some(left) = &tangency.left {
+                if i < panels.len() {
+                    let other = other_side(&tangency.right);
+                    let (direction, strength) = if left.auto {
+                        match other {
+                            Some(o) if !o.auto => {
+                                (unit(o.direction.expect("validated direction")), o.strength)
+                            }
+                            _ if both_auto(other) => {
+                                (mean(panel_dir[i - 1], panel_dir[i]), left.strength)
+                            }
+                            _ => (panel_dir[i], left.strength),
+                        }
+                    } else {
+                        (
+                            unit(left.direction.expect("validated direction")),
+                            left.strength,
+                        )
+                    };
+                    panels[i].start = Some(aircraft_geom::wing::Tangent {
+                        direction,
+                        strength,
+                    });
                 }
-            })
-        };
-        Ok(Some(aircraft_geom::wing::LeTangency {
-            root_start: station_tangent(dsl.root),
-            kink_end,
-            kink_start,
-            tip_end: station_tangent(dsl.tip),
-        }))
+            }
+            // right: arrival on panel i-1 (from station i-1).
+            if let Some(right) = &tangency.right {
+                if i >= 1 {
+                    let other = other_side(&tangency.left);
+                    let (direction, strength) = if right.auto {
+                        match other {
+                            Some(o) if !o.auto => {
+                                (unit(o.direction.expect("validated direction")), o.strength)
+                            }
+                            _ if both_auto(other) => {
+                                (mean(panel_dir[i - 2], panel_dir[i - 1]), right.strength)
+                            }
+                            _ => (panel_dir[i - 1], right.strength),
+                        }
+                    } else {
+                        (
+                            unit(right.direction.expect("validated direction")),
+                            right.strength,
+                        )
+                    };
+                    panels[i - 1].end = Some(aircraft_geom::wing::Tangent {
+                        direction,
+                        strength,
+                    });
+                }
+            }
+        }
+        Ok(panels)
     }
 
     /// Build the wing's analytic STEP document (NURBS skins, planar caps).
@@ -428,8 +451,8 @@ impl Engine {
             return Err(MeshJobError::Cancelled);
         }
         let symmetry = self.wing_symmetry_enabled(component_index)?;
-        let le_tangency = self
-            .resolve_le_tangency(component_index)
+        let panel_tangencies = self
+            .resolve_panel_tangencies(component_index)
             .map_err(MeshJobError::Failed)?;
         let (_, stations) = self
             .evaluated_stations(component_index)
@@ -439,7 +462,7 @@ impl Engine {
             &stations,
             symmetry,
             aircraft_geom::step_model::StepTolerances::default(),
-            le_tangency,
+            &panel_tangencies,
             full,
         )
         .map_err(MeshJobError::Failed)?;
@@ -497,8 +520,8 @@ impl Engine {
         let (wing_id, stations) = self
             .evaluated_stations(component_index)
             .map_err(MeshJobError::Failed)?;
-        let le_tangency = self
-            .resolve_le_tangency(component_index)
+        let panel_tangencies = self
+            .resolve_panel_tangencies(component_index)
             .map_err(MeshJobError::Failed)?;
         let WingMesh { mesh, faces } = build_wing_mesh(
             &wing_id,
@@ -507,7 +530,7 @@ impl Engine {
             &resolved_geometry_quality(&stations, quality),
             symmetry_enabled && !full_model,
             full_model,
-            le_tangency,
+            &panel_tangencies,
         )
         .map_err(MeshJobError::Failed)?;
 
@@ -538,8 +561,27 @@ impl Engine {
         full_model.hash(&mut hasher);
         quality_key(quality).hash(&mut hasher);
         if let Some(Component::Wing(wing)) = self.doc.components.get(component_index) {
-            if let Some(tangency) = &wing.tangency {
-                tangency.leading_edge.hash(&mut hasher);
+            for station in &wing.stations {
+                station.id.hash(&mut hasher);
+                if let Some(tangency) = &station.tangency {
+                    1u8.hash(&mut hasher);
+                    for side in [&tangency.left, &tangency.right] {
+                        match side {
+                            Some(side) => {
+                                side.auto.hash(&mut hasher);
+                                if let Some(direction) = side.direction {
+                                    for value in direction {
+                                        value.to_bits().hash(&mut hasher);
+                                    }
+                                }
+                                side.strength.to_bits().hash(&mut hasher);
+                            }
+                            None => 0u8.hash(&mut hasher),
+                        }
+                    }
+                } else {
+                    0u8.hash(&mut hasher);
+                }
             }
         }
         if let Ok((_, stations)) = self.evaluated_stations(component_index) {
@@ -589,17 +631,22 @@ fn apply_to_document(
             doc.parameters.insert(id.clone(), *value);
             Ok(())
         }
-        Patch::SetLeTangency {
+        Patch::SetStationTangency {
             component_index,
-            spec,
+            station_index,
+            tangency,
         } => {
             let Component::Wing(wing) = doc
                 .components
                 .get_mut(*component_index)
                 .ok_or_else(|| unknown_component(*component_index))?;
-            wing.tangency = spec
-                .clone()
-                .map(|leading_edge| aircraft_model::aircraft::Tangency { leading_edge });
+            let station = wing.stations.get_mut(*station_index).ok_or_else(|| {
+                Diagnostic::error(
+                    Code::UnknownReference,
+                    format!("station index {station_index} is outside the wing"),
+                )
+            })?;
+            station.tangency = *tangency;
             Ok(())
         }
         Patch::AddParameter { id, value } => {
@@ -674,7 +721,7 @@ fn apply_to_document(
 /// Resolve a patch's seed nodes against a freshly built graph.
 fn resolve_seeds(graph: &Graph, patch: &Patch) -> Vec<usize> {
     match patch {
-        Patch::SetLeTangency { .. } => Vec::new(),
+        Patch::SetStationTangency { .. } => Vec::new(),
         Patch::AddParameter { id, .. } => graph.parameter_node(id).into_iter().collect(),
         Patch::SetParameter { id, .. } => graph.parameter_node(id).into_iter().collect(),
         Patch::SetStationField {

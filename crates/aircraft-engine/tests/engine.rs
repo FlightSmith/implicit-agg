@@ -309,9 +309,17 @@ fn root_tangency_changes_the_le_departure_at_the_root_only() {
     let before = engine.evaluated_stations(0).unwrap().1;
 
     let result = engine.apply_patch(
-        Patch::SetLeTangency {
+        Patch::SetStationTangency {
             component_index: 0,
-            spec: Some("root:0.55,-0.83,0".into()),
+            station_index: 0,
+            tangency: Some(aircraft_model::StationTangency {
+                left: Some(aircraft_model::StationTangencySide {
+                    auto: false,
+                    direction: Some([0.55, -0.83, 0.0]),
+                    strength: 1.0,
+                }),
+                right: None,
+            }),
         },
         TransactionId(30),
     );

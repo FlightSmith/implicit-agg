@@ -93,6 +93,37 @@ pub enum TrailingEdge {
     ChordFraction { value: TypedValue },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StationTangencySide {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<[f64; 3]>,
+    #[serde(
+        default = "default_tangency_strength",
+        skip_serializing_if = "strength_is_default"
+    )]
+    pub strength: f64,
+}
+
+fn default_tangency_strength() -> f64 {
+    1.0
+}
+
+fn strength_is_default(strength: &f64) -> bool {
+    *strength == 1.0
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct StationTangency {
+    /// Tangent of the LE path departing this station tipward.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left: Option<StationTangencySide>,
+    /// Tangent of the LE path arriving at this station from inboard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right: Option<StationTangencySide>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Station {
     pub id: String,
@@ -106,6 +137,9 @@ pub struct Station {
         skip_serializing_if = "Option::is_none"
     )]
     pub trailing_edge: Option<TrailingEdge>,
+    /// Leading-edge tangency constraints anchored at this station.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tangency: Option<StationTangency>,
 }
 
 impl Station {
@@ -175,20 +209,12 @@ pub enum WingRole {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Tangency {
-    #[serde(rename = "leadingEdge")]
-    pub leading_edge: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wing {
     pub id: String,
     pub role: WingRole,
     pub frame: Frame,
     pub symmetry: Symmetry,
     pub stations: Vec<Station>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tangency: Option<Tangency>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub interfaces: BTreeMap<String, Interface>,
 }

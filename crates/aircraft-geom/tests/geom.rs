@@ -209,8 +209,8 @@ fn rectangular_diamond_wing_volume_is_exact() {
     ];
     let quality = uniform_quality(2, 8, 1);
 
-    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, None).unwrap();
-    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, None).unwrap();
+    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, &[]).unwrap();
+    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, &[]).unwrap();
 
     assert!(half.mesh.validate().closed);
     assert!(full.mesh.validate().closed);
@@ -262,7 +262,7 @@ fn naca0012_rectangular_wing_volume_matches_the_analytic_integral() {
         station("tip", &curve, [0.0, -2.0, 0.0], 1.5),
     ];
     let quality = uniform_quality(2, 64, 1);
-    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, None).unwrap();
+    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, &[]).unwrap();
     let validation = half.mesh.validate();
     assert!(validation.is_sound() && validation.closed);
 
@@ -301,7 +301,7 @@ fn full_model_has_no_duplicate_centerline_faces() {
         station("tip", &curve, [0.0, -2.0, 0.0], 1.5),
     ];
     let quality = uniform_quality(2, 32, 1);
-    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, None).unwrap();
+    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, &[]).unwrap();
     let validation = full.mesh.validate();
     assert!(
         validation.closed,
@@ -330,7 +330,7 @@ fn half_model_boundary_is_the_root_ring_only() {
     ];
     let quality = uniform_quality(2, 16, 1);
     let open_half =
-        build_wing_mesh("test-wing", &stations, true, &quality, false, false, None).unwrap();
+        build_wing_mesh("test-wing", &stations, true, &quality, false, false, &[]).unwrap();
     let validation = open_half.mesh.validate();
     assert!(!validation.closed, "open half has a root boundary");
     assert!(validation.manifold && validation.oriented);
@@ -355,7 +355,7 @@ fn face_sources_trace_to_stations() {
         station("tip", &curve, [1.0, -4.0, 0.3], 0.6),
     ];
     let quality = uniform_quality(3, 16, 2);
-    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, None).unwrap();
+    let full = build_wing_mesh("test-wing", &stations, true, &quality, false, true, &[]).unwrap();
     let mut panels = 0;
     let mut mirrored = 0;
     let mut tip_caps = 0;
@@ -440,7 +440,7 @@ fn volume_metrics_report_both_bases() {
         station("tip", &curve, [0.0, -2.0, 0.0], 1.5),
     ];
     let quality = uniform_quality(2, 8, 1);
-    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, None).unwrap();
+    let half = build_wing_mesh("test-wing", &stations, true, &quality, true, false, &[]).unwrap();
     let volume = volume_metrics(&half.mesh);
     assert!((volume.volume.full - 2.0 * volume.volume.half).abs() < 1e-12);
     assert!((volume.wetted_area.full - 2.0 * volume.wetted_area.half).abs() < 1e-12);
@@ -512,7 +512,7 @@ fn degenerate_wings_are_rejected() {
         &uniform_quality(1, 8, 1),
         false,
         false,
-        None,
+        &[],
     )
     .expect_err("single station must fail");
     assert!(error
@@ -531,7 +531,7 @@ fn degenerate_wings_are_rejected() {
         &uniform_quality(2, 8, 1),
         true,
         false,
-        None,
+        &[],
     )
     .expect_err("collapsed wing must fail");
     assert!(!error.is_empty());
@@ -625,19 +625,19 @@ fn le_tangency_bends_the_inboard_panel_and_keeps_stations_anchored() {
         stations[2].position,
         stations[1].position,
     ));
-    let tangency = aircraft_geom::wing::LeTangency {
-        root_start: None,
-        kink_end: Some(aircraft_geom::wing::Tangent {
-            direction: d2,
-            strength: 1.0,
-        }),
-        kink_start: None, // right panel stays straight
-        tip_end: None,
-    };
+    let tangency = [
+        aircraft_geom::PanelTangency {
+            start: None,
+            end: Some(aircraft_geom::wing::Tangent {
+                direction: d2,
+                strength: 1.0,
+            }),
+        },
+        aircraft_geom::PanelTangency::default(), // right panel stays straight
+    ];
 
-    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
-    let bent =
-        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, &[]).unwrap();
+    let bent = build_wing_mesh("w", &stations, true, &quality, true, false, &tangency).unwrap();
     assert!(bent.mesh.validate().is_sound() && bent.mesh.validate().closed);
 
     // Station LEs stay anchored in both meshes.
@@ -685,24 +685,27 @@ fn le_tangency_meets_in_the_middle_when_both_sides_are_set() {
     let quality = uniform_quality(3, 32, 4);
     // Explicit vectors on both sides: each panel bends toward its vector.
     // Realistic LE tangents are dominated by the spanwise run.
-    let tangency = aircraft_geom::wing::LeTangency {
-        root_start: None,
-        kink_end: Some(aircraft_geom::wing::Tangent {
-            direction: vnormalize([0.35, -0.94, 0.05]),
-            strength: 1.0,
-        }),
-        kink_start: Some(aircraft_geom::wing::Tangent {
-            direction: vnormalize([0.2, -0.97, 0.1]),
-            strength: 1.0,
-        }),
-        tip_end: None,
-    };
-    let bent =
-        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();
+    let tangency = [
+        aircraft_geom::PanelTangency {
+            start: None,
+            end: Some(aircraft_geom::wing::Tangent {
+                direction: vnormalize([0.35, -0.94, 0.05]),
+                strength: 1.0,
+            }),
+        },
+        aircraft_geom::PanelTangency {
+            start: Some(aircraft_geom::wing::Tangent {
+                direction: vnormalize([0.2, -0.97, 0.1]),
+                strength: 1.0,
+            }),
+            end: None,
+        },
+    ];
+    let bent = build_wing_mesh("w", &stations, true, &quality, true, false, &tangency).unwrap();
     let validation = bent.mesh.validate();
     assert!(validation.is_sound() && validation.closed);
     // Both panels now bulge: the straight reference has less projected area.
-    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, &[]).unwrap();
     assert!(bent.mesh.projected_area_xy() > straight.mesh.projected_area_xy());
 }
 
@@ -718,18 +721,15 @@ fn root_departure_tangent_bends_the_le_at_the_root_only() {
     // The user's case: a departure direction at the root section. A mostly
     // aft-pointing tangent (in the original straight direction) pushes the
     // near-root LE aft; the kink and outboard panel are untouched.
-    let tangency = aircraft_geom::wing::LeTangency {
-        root_start: Some(aircraft_geom::wing::Tangent {
+    let tangency = [aircraft_geom::PanelTangency {
+        start: Some(aircraft_geom::wing::Tangent {
             direction: vnormalize([0.55, -0.83, 0.0]),
             strength: 1.0,
         }),
-        kink_end: None,
-        kink_start: None,
-        tip_end: None,
-    };
-    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
-    let bent =
-        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap();
+        end: None,
+    }];
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, &[]).unwrap();
+    let bent = build_wing_mesh("w", &stations, true, &quality, true, false, &tangency).unwrap();
     assert!(bent.mesh.validate().is_sound() && bent.mesh.validate().closed);
 
     // The tangency also shifts ring spanwise positions, so measure the LE
@@ -772,19 +772,17 @@ fn tangency_strength_scales_the_bulge_and_zero_removes_it() {
         station("tip", &curve, [2.2, -7.3, 0.45], 0.42),
     ];
     let quality = uniform_quality(3, 32, 4);
-    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, None).unwrap();
+    let straight = build_wing_mesh("w", &stations, true, &quality, true, false, &[]).unwrap();
 
     let build = |strength: f64| {
-        let tangency = aircraft_geom::wing::LeTangency {
-            root_start: None,
-            kink_end: Some(aircraft_geom::wing::Tangent {
+        let tangency = [aircraft_geom::PanelTangency {
+            start: None,
+            end: Some(aircraft_geom::wing::Tangent {
                 direction: vnormalize([0.35, -0.94, 0.05]),
                 strength,
             }),
-            kink_start: None,
-            tip_end: None,
-        };
-        build_wing_mesh("w", &stations, true, &quality, true, false, Some(tangency)).unwrap()
+        }];
+        build_wing_mesh("w", &stations, true, &quality, true, false, &tangency).unwrap()
     };
 
     let zero = build(0.0);
@@ -808,4 +806,3 @@ fn tangency_strength_scales_the_bulge_and_zero_removes_it() {
     // And the shaped meshes still differ from each other.
     assert!(weak.mesh.vertices != strong.mesh.vertices);
 }
-

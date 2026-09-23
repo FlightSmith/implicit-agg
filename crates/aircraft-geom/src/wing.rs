@@ -52,7 +52,7 @@ pub struct WingMesh {
 pub fn loft_rings(
     stations: &[EvaluatedStation],
     quality: &ResolvedQuality,
-    le_tangency: Option<LeTangency>,
+    panel_tangencies: &[PanelTangency],
 ) -> Vec<Ring> {
     let specs: Vec<StationSpec<'_>> = stations
         .iter()
@@ -75,14 +75,10 @@ pub fn loft_rings(
         let subdivisions = quality.span_subdivisions.get(panel).copied().unwrap_or(1);
         let lower = &base_rings[panel];
         let upper = &base_rings[panel + 1];
-        // Panel 0 carries the root departure and the kink arrival; panel 1
-        // the kink departure and the tip arrival. Later panels (v0.2: only
-        // the first two are shapeable) stay straight.
-        let (t_start, t_end) = match le_tangency {
-            Some(le) if panel == 0 => (le.root_start, le.kink_end),
-            Some(le) if panel == 1 => (le.kink_start, le.tip_end),
-            _ => (None, None),
-        };
+        let (t_start, t_end) = panel_tangencies
+            .get(panel)
+            .map(|p| (p.start, p.end))
+            .unwrap_or((None, None));
         let le_a = lower.points[0];
         let le_b = upper.points[0];
         for step in 0..subdivisions {
@@ -101,10 +97,6 @@ pub fn loft_rings(
     rings
 }
 
-/** Leading-edge tangency at the shared kink of the first two panels: the
- * direction the LE curve leaves the kink with on each side. `kink_end`
- * steers the inboard panel's end, `kink_start` the outboard panel's start;
- * a side without a tangent keeps its straight sweep. */
 /// One tangent constraint: a unit direction plus its strength (which scales
 /// the Bezier control distance along the direction; 0 = straight panel,
 /// 1 = default fullness).
@@ -114,16 +106,13 @@ pub struct Tangent {
     pub strength: f64,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct LeTangency {
-    /// Departure tangent at the root section (start of the inboard panel).
-    pub root_start: Option<Tangent>,
-    /// Arrival tangent at the kink for the inboard panel's end.
-    pub kink_end: Option<Tangent>,
-    /// Departure tangent at the kink for the outboard panel's start.
-    pub kink_start: Option<Tangent>,
-    /// Arrival tangent at the tip section (end of the outboard panel).
-    pub tip_end: Option<Tangent>,
+/// Per-panel tangency: the LE departure tangent at the panel's inboard end
+/// and the arrival tangent at its outboard end. A panel without tangencies
+/// keeps its straight sweep.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PanelTangency {
+    pub start: Option<Tangent>,
+    pub end: Option<Tangent>,
 }
 
 /// Deviation of a tangent-constrained LE path from the straight chord line,
@@ -200,7 +189,7 @@ pub fn build_wing_mesh(
     quality: &ResolvedQuality,
     root_cap: bool,
     mirror: bool,
-    le_tangency: Option<LeTangency>,
+    panel_tangencies: &[PanelTangency],
 ) -> Result<WingMesh, Vec<Diagnostic>> {
     if stations.len() < 2 {
         return Err(vec![Diagnostic::error(
@@ -240,7 +229,7 @@ pub fn build_wing_mesh(
     }
 
     let k = quality.chord_samples;
-    let rings = loft_rings(stations, quality, le_tangency);
+    let rings = loft_rings(stations, quality, panel_tangencies);
 
     let mut builder = RawBuilder::default();
     let mut ring_index = 0usize;

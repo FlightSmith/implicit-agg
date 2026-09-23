@@ -78,15 +78,26 @@ export interface StationRow {
   twist: number;
   valueKinds: ValueKinds;
   bindings: ValueBindings;
+  tangency: StationTangency | null;
 }
 
 export interface WingStations {
   wingId: string;
   /** Interface names published by this wing (autocomplete candidates). */
   interfaces: string[];
-  /** Leading-edge tangency DSL, when set. */
-  leTangency: string | null;
   stations: StationRow[];
+}
+
+/** One tangency side of a station. */
+export interface StationTangencySide {
+  auto: boolean;
+  direction: [number, number, number] | null;
+  strength: number;
+}
+
+export interface StationTangency {
+  left: StationTangencySide | null;
+  right: StationTangencySide | null;
 }
 
 export interface PanelReport {
@@ -138,9 +149,10 @@ export interface CoreApi {
   parameters(): Record<string, number>;
   setParameter(id: string, value: number, transaction: number): UpdateResultDto;
   addParameter(id: string, value: number, transaction: number): UpdateResultDto;
-  setLeTangency(
+  setStationTangency(
     componentIndex: number,
-    spec: string | null,
+    stationIndex: number,
+    tangency: StationTangency | null,
     transaction: number,
   ): UpdateResultDto;
   /** Analytic STEP document of the wing (text, metres). */

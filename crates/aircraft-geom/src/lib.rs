@@ -16,4 +16,4 @@ pub use metrics::{BasisPair, PanelMetrics, PlanformMetrics, VolumeMetrics};
 pub use profile::ProfileCurve;
 pub use quality::ResolvedQuality;
 pub use section::{Ring, StationSpec, TrailingEdgeSpec};
-pub use wing::{build_wing_mesh, FaceSource, WingMesh};
+pub use wing::{build_wing_mesh, FaceSource, PanelTangency, Tangent, WingMesh};

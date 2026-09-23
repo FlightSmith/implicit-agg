@@ -97,12 +97,22 @@ export class WasmCore implements CoreApi {
     return this.engine.export_step(componentIndex, fullModel) as string;
   }
 
-  setLeTangency(
+  setStationTangency(
     componentIndex: number,
-    spec: string | null,
+    stationIndex: number,
+    tangency: unknown,
     transaction: number,
   ): UpdateResultDto {
-    return this.engine.set_le_tangency(componentIndex, spec, transaction) as UpdateResultDto;
+    const result = this.engine.set_station_tangency(
+      componentIndex,
+      stationIndex,
+      tangency,
+      transaction,
+    );
+    if (result && typeof result === "object") {
+      return result as UpdateResultDto;
+    }
+    throw new Error("unexpected setStationTangency result");
   }
 
   setStationField(

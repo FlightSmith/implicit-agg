@@ -8,7 +8,7 @@
 use crate::nurbs::{interpolate_cubic, skin, NurbsCurve, NurbsSurface};
 pub use crate::profile::cosine_samples;
 use crate::quality::ResolvedQuality;
-use crate::wing::{loft_rings, EvaluatedStation, LeTangency};
+use crate::wing::{loft_rings, EvaluatedStation, PanelTangency};
 use aircraft_model::{Code, Diagnostic};
 
 #[derive(Debug, Clone)]
@@ -108,7 +108,7 @@ pub fn wing_model(
     stations: &[EvaluatedStation],
     symmetry_enabled: bool,
     tolerances: StepTolerances,
-    le_tangency: Option<LeTangency>,
+    panel_tangencies: &[PanelTangency],
     full: bool,
 ) -> Result<StepModel, Vec<Diagnostic>> {
     if stations.len() < 2 {
@@ -130,7 +130,7 @@ pub fn wing_model(
         chord_samples: chord_samples_for(stations, tolerances.max_chordal_deviation),
         span_subdivisions: span_subdivisions(stations, tolerances.max_edge_length),
     };
-    let rings = loft_rings(stations, &quality, le_tangency);
+    let rings = loft_rings(stations, &quality, panel_tangencies);
     let mut rows: Vec<Row> = rings
         .iter()
         .map(|r| ring_rows(r, row_chord(&rings)))

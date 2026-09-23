@@ -57,45 +57,66 @@ pub fn validate(doc: &AircraftDefinition) -> Vec<Diagnostic> {
     diagnostics
 }
 
+/// Station tangency rules: `left` (departure tipward) is invalid on the
+/// tip; `right` (arrival from inboard) is invalid on the root; `auto` and
+/// `direction` are mutually exclusive; strength must be non-negative.
+#[allow(clippy::too_many_arguments)]
+fn validate_station_tangency(
+    station_index: usize,
+    last_station_index: usize,
+    station: &crate::aircraft::Station,
+    tangency: &crate::aircraft::StationTangency,
+    path: &str,
+    wing_id: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let subject = format!("component {} / station {} / tangency", wing_id, station.id);
+    let mut push = |message: String, side: &str| {
+        diagnostics.push(
+            Diagnostic::error(Code::InvalidTangency, message)
+                .with_path(format!("{path}/{side}"))
+                .with_subject(subject.clone()),
+        );
+    };
+
+    if tangency.left.is_some() && station_index == last_station_index {
+        push(
+            "'left' (departure) is not valid on the tip station; use 'right' (arrival)".into(),
+            "left",
+        );
+    }
+    if tangency.right.is_some() && station_index == 0 {
+        push(
+            "'right' (arrival) is not valid on the root station; use 'left' (departure)".into(),
+            "right",
+        );
+    }
+
+    for (name, side) in [("left", &tangency.left), ("right", &tangency.right)] {
+        let Some(side) = side else { continue };
+        if side.auto && side.direction.is_some() {
+            push(
+                format!("{name} cannot combine 'auto' with an explicit direction"),
+                name,
+            );
+        }
+        if !side.auto && side.direction.is_none() {
+            push(format!("{name} needs a direction or \"auto\": true"), name);
+        }
+        if !(0.0..=10.0).contains(&side.strength) {
+            push(format!("{name} strength must lie in [0, 10]"), name);
+        }
+    }
+}
+
 fn validate_wing(
     doc: &AircraftDefinition,
     component_index: usize,
     wing: &crate::aircraft::Wing,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    if let Some(tangency) = &wing.tangency {
-        match crate::tangency::parse_le_tangency(&tangency.leading_edge) {
-            Ok(parsed) => {
-                if parsed.is_empty() {
-                    diagnostics.push(
-                        Diagnostic::error(
-                            Code::InvalidTangency,
-                            "tangency must name at least one side",
-                        )
-                        .with_path(format!("components/{component_index}/tangency"))
-                        .with_subject(format!("component {} / tangency", wing.id)),
-                    );
-                }
-            }
-            Err(diagnostic) => diagnostics.push(
-                diagnostic
-                    .with_path(format!("components/{component_index}/tangency/leadingEdge"))
-                    .with_subject(format!("component {} / tangency", wing.id)),
-            ),
-        }
-        if wing.stations.len() < 3 {
-            diagnostics.push(
-                Diagnostic::error(
-                    Code::InvalidTangency,
-                    "leading-edge tangency needs at least three stations (two panels)",
-                )
-                .with_path(format!("components/{component_index}/stations"))
-                .with_subject(format!("component {} / tangency", wing.id)),
-            );
-        }
-    }
-
     let mut station_ids: Vec<&str> = Vec::new();
+    let last_station_index = wing.stations.len().saturating_sub(1);
     for (station_index, station) in wing.stations.iter().enumerate() {
         let path = station_path(component_index, station_index);
         let subject = format!("component {} / station {}", wing.id, station.id);
@@ -114,6 +135,19 @@ fn validate_wing(
             );
         }
         station_ids.push(&station.id);
+
+        if let Some(tangency) = &station.tangency {
+            let path = format!("{path}/tangency");
+            validate_station_tangency(
+                station_index,
+                last_station_index,
+                station,
+                tangency,
+                &path,
+                &wing.id,
+                diagnostics,
+            );
+        }
 
         if !doc.airfoils.contains_key(&station.airfoil) {
             diagnostics.push(

@@ -154,6 +154,7 @@ struct StationRowDto {
     value_kinds: ValueKindsDto,
     /// The parameter bound to each field, when bound as `$param`.
     bindings: ValueBindingsDto,
+    tangency: Option<StationTangencyDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -178,12 +179,33 @@ struct ValueBindingsDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct StationTangencySideDto {
+    auto: bool,
+    direction: Option<Vec<f64>>,
+    strength: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StationTangencyDto {
+    left: Option<StationTangencySideDto>,
+    right: Option<StationTangencySideDto>,
+}
+
+fn side_dto(side: &aircraft_model::StationTangencySide) -> StationTangencySideDto {
+    StationTangencySideDto {
+        auto: side.auto,
+        direction: side.direction.map(|d| vec![d[0], d[1], d[2]]),
+        strength: side.strength,
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WingStationsDto {
     wing_id: String,
     /// Interface names published by this wing, for expression autocomplete.
     interfaces: Vec<String>,
-    /// The leading-edge tangency DSL, when set.
-    le_tangency: Option<String>,
     stations: Vec<StationRowDto>,
 }
 
@@ -247,22 +269,33 @@ impl WasmEngine {
             .expect("serializable result")
     }
 
-    pub fn set_le_tangency(
+    pub fn set_station_tangency(
         &mut self,
         component_index: usize,
-        spec: Option<String>,
+        station_index: usize,
+        tangency: Option<JsValue>,
         transaction: u32,
-    ) -> JsValue {
+    ) -> Result<JsValue, JsValue> {
+        let parsed: Option<aircraft_model::StationTangency> = match tangency {
+            Some(value) => Some(
+                serde_wasm_bindgen::from_value(value)
+                    .map_err(|error| JsValue::from_str(&format!("invalid tangency: {error}")))?,
+            ),
+            None => None,
+        };
         let result = self.engine.apply_patch(
-            aircraft_engine::Patch::SetLeTangency {
+            aircraft_engine::Patch::SetStationTangency {
                 component_index,
-                spec,
+                station_index,
+                tangency: parsed,
             },
             aircraft_engine::TransactionId(u64::from(transaction)),
         );
         self.record(&result);
-        serde_wasm_bindgen::to_value(&update_result_dto(&result, &self.engine))
-            .expect("serializable result")
+        Ok(
+            serde_wasm_bindgen::to_value(&update_result_dto(&result, &self.engine))
+                .expect("serializable result"),
+        )
     }
 
     /// Build the wing's analytic STEP document (text, metres).
@@ -362,20 +395,22 @@ impl WasmEngine {
                             chord: bound_of(&doc_station.chord),
                             twist: bound_of(&doc_station.twist),
                         },
+                        tangency: doc_station.tangency.as_ref().map(|t| StationTangencyDto {
+                            left: t.left.as_ref().map(side_dto),
+                            right: t.right.as_ref().map(side_dto),
+                        }),
                     })
                 })
                 .collect();
-            let (interfaces, le_tangency) = match doc.components.get(component_index) {
-                Some(aircraft_model::aircraft::Component::Wing(wing)) => (
-                    wing.interfaces.keys().cloned().collect(),
-                    wing.tangency.as_ref().map(|t| t.leading_edge.clone()),
-                ),
-                _ => (Vec::new(), None),
+            let interfaces = match doc.components.get(component_index) {
+                Some(aircraft_model::aircraft::Component::Wing(wing)) => {
+                    wing.interfaces.keys().cloned().collect()
+                }
+                _ => Vec::new(),
             };
             wings.push(WingStationsDto {
                 wing_id,
                 interfaces,
-                le_tangency,
                 stations: rows,
             });
         }

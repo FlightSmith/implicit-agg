@@ -22,7 +22,7 @@ fn fixture_mesh() -> Mesh {
         chord_samples: 16,
         span_subdivisions: vec![3],
     };
-    build_wing_mesh("fixture", &stations, true, &quality, true, false, None)
+    build_wing_mesh("fixture", &stations, true, &quality, true, false, &[])
         .expect("fixture mesh")
         .mesh
 }

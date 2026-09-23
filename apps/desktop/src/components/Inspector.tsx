@@ -265,70 +265,191 @@ function bindKeyOf(field: FieldName): keyof StationRow["bindings"] {
   }
 }
 
-/** Wing-level leading-edge tangency: presets plus the raw DSL. */
-function WingTangency({
-  wingIndex,
-  wing,
+/** One tangency side editor: direction triplet + strength. */
+function TangencySideEditor({
+  side,
+  label,
+  direction,
+  strength,
+  onDirection,
+  onStrength,
+  onClear,
 }: {
-  wingIndex: number;
+  side: "left" | "right";
+  label: string;
+  direction: string;
+  strength: string;
+  onDirection(text: string): void;
+  onStrength(text: string): void;
+  onClear(): void;
+}) {
+  return (
+    <div className="tangency-side" data-testid={`tangency-${side}`}>
+      <span className="tangency-side-label">{label}</span>
+      <input
+        className="expression"
+        placeholder="x,y,z — aircraft axes"
+        value={direction}
+        onChange={(event) => onDirection(event.target.value)}
+        data-testid={`tangency-${side}-direction`}
+      />
+      <input
+        className="number"
+        type="number"
+        step="0.05"
+        min="0"
+        placeholder="1.0"
+        value={strength}
+        onChange={(event) => onStrength(event.target.value)}
+        data-testid={`tangency-${side}-strength`}
+      />
+      <button
+        className="mode"
+        title={`clear ${label} tangency`}
+        onClick={onClear}
+        data-testid={`tangency-${side}-clear`}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** Station-level LE tangency: departure (left, tipward) and arrival
+ * (right, from inboard) tangents, each with its own strength. */
+function StationTangencyEditor({
+  wing,
+  wingIndex,
+  stationIndex,
+  station,
+}: {
   wing: WingStations;
+  wingIndex: number;
+  stationIndex: number;
+  station: StationRow;
 }) {
   const beginEdit = useWorkspace((s) => s.beginEdit);
   const endEdit = useWorkspace((s) => s.endEdit);
   const commit = useWorkspace((s) => s.commit);
-  const [draft, setDraft] = useState(wing.leTangency ?? "");
+  const isFirst = stationIndex === 0;
+  const isLast = stationIndex === wing.stations.length - 1;
 
-  useEffect(() => setDraft(wing.leTangency ?? ""), [wing.leTangency]);
+  const current = station.tangency;
+  const [leftDir, setLeftDir] = useState(
+    current?.left?.direction ? current.left.direction.join(",") : "",
+  );
+  const [leftStrength, setLeftStrength] = useState(
+    String(current?.left?.strength ?? 1),
+  );
+  const [rightDir, setRightDir] = useState(
+    current?.right?.direction ? current.right.direction.join(",") : "",
+  );
+  const [rightStrength, setRightStrength] = useState(
+    String(current?.right?.strength ?? 1),
+  );
 
-  const apply = (spec: string | null) => {
+  useEffect(() => {
+    setLeftDir(current?.left?.direction ? current.left.direction.join(",") : "");
+    setLeftStrength(String(current?.left?.strength ?? 1));
+    setRightDir(current?.right?.direction ? current.right.direction.join(",") : "");
+    setRightStrength(String(current?.right?.strength ?? 1));
+  }, [stationIndex, current?.left?.direction, current?.right?.direction]);
+
+  const parseTriplet = (text: string): [number, number, number] | null => {
+    const parts = text.split(",").map((p) => Number(p.trim()));
+    if (parts.length !== 3 || parts.some((p) => !Number.isFinite(p))) return null;
+    return [parts[0], parts[1], parts[2]];
+  };
+
+  const setDir = (side: "left" | "right", text: string) => {
+    side === "left" ? setLeftDir(text) : setRightDir(text);
+  };
+
+  const applyTangency = (side: "left" | "right", directionText: string, strengthText: string) => {
+    const triplet = parseTriplet(directionText);
+    const strength = Number(strengthText);
+    if (!triplet || !Number.isFinite(strength)) return;
     beginEdit();
-    commit((api) => api.setLeTangency(wingIndex, spec, Date.now()));
+    commit((api) =>
+      api.setStationTangency(
+        wingIndex,
+        stationIndex,
+        side === "left"
+          ? {
+              left: { auto: false, direction: triplet, strength },
+              right: current?.right ?? null,
+            }
+          : {
+              left: current?.left ?? null,
+              right: { auto: false, direction: triplet, strength },
+            },
+        Date.now(),
+      ),
+    );
     endEdit();
   };
 
-  const commitDraft = () => {
-    const text = draft.trim();
-    if (text === (wing.leTangency ?? "")) return;
-    apply(text === "" ? null : text);
+  const clearSide = (side: "left" | "right") => {
+    beginEdit();
+    commit((api) =>
+      api.setStationTangency(
+        wingIndex,
+        stationIndex,
+        side === "left"
+          ? { left: null, right: current?.right ?? null }
+          : { left: current?.left ?? null, right: null },
+        Date.now(),
+      ),
+    );
+    endEdit();
   };
 
-  const presets: [string, string | null][] = [
-    ["none", null],
-    ["left-auto", "left:auto"],
-    ["right-auto", "right:auto"],
-    ["full-auto", "full:auto"],
-  ];
+  const editSide = (side: "left" | "right") => ({
+    onDirection: (text: string) => {
+      setDir(side, text);
+      if (parseTriplet(text)) {
+        beginEdit();
+        applyTangency(side, text, side === "left" ? leftStrength : rightStrength);
+      }
+    },
+    onStrength: (text: string) => {
+      side === "left" ? setLeftStrength(text) : setRightStrength(text);
+      const dirText = side === "left" ? leftDir : rightDir;
+      const strength = Number(text);
+      if (dirText && Number.isFinite(strength)) {
+        beginEdit();
+        applyTangency(side, dirText, String(strength));
+      }
+    },
+  });
 
   return (
     <div className="field" data-testid="tangency">
       <div className="field-head">
-        <span className="field-label">wing LE tangency</span>
+        <span className="field-label">LE tangency</span>
       </div>
-      <div className="presets">
-        {presets.map(([label, spec]) => (
-          <button
-            key={label}
-            className={(wing.leTangency ?? null) === spec ? "mode selected" : "mode"}
-            onClick={() => apply(spec)}
-            data-testid={`tangency-preset-${label}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="field-input">
-        <input
-          className="expression"
-          placeholder="root:0.9,-0.3,0;left:auto;right:0.8,0,0.1"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commitDraft}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") (event.target as HTMLInputElement).blur();
-          }}
-          data-testid="tangency-input"
+      {!isLast && (
+        <TangencySideEditor
+          side="left"
+          label="departure →"
+          direction={leftDir}
+          strength={leftStrength}
+          onDirection={editSide("left").onDirection}
+          onStrength={editSide("left").onStrength}
+          onClear={() => clearSide("left")}
         />
-      </div>
+      )}
+      {!isFirst && (
+        <TangencySideEditor
+          side="right"
+          label="← arrival"
+          direction={rightDir}
+          strength={rightStrength}
+          onDirection={editSide("right").onDirection}
+          onStrength={editSide("right").onStrength}
+          onClear={() => clearSide("right")}
+        />
+      )}
     </div>
   );
 }
@@ -353,7 +474,12 @@ export function Inspector() {
       <div className="station-meta">
         airfoil {station.airfoil} · units {meta.lengthUnit}, {meta.angleUnit}
       </div>
-      <WingTangency wingIndex={wingIndex} wing={wing} />
+      <StationTangencyEditor
+        wing={wing}
+        wingIndex={wingIndex}
+        stationIndex={stationIndex}
+        station={station}
+      />
       <Field
         core={core}
         wingIndex={wingIndex}

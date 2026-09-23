@@ -338,6 +338,9 @@
         },
         "trailingEdge": {
           "$ref": "#/$defs/trailingEdge"
+        },
+        "tangency": {
+          "$ref": "#/$defs/stationTangency"
         }
       }
     },
@@ -446,20 +449,6 @@
           "additionalProperties": {
             "$ref": "#/$defs/stationPlaneInterface"
           }
-        },
-        "tangency": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "leadingEdge"
-          ],
-          "properties": {
-            "leadingEdge": {
-              "type": "string",
-              "description": "Leading-edge tangency DSL. Panel clauses shape the two panels: left = root-kink, right = kink-tip, full = both; spec is 'auto' (adapt to the other side; full:auto uses the mean direction) or a tangent vector x,y,z in aircraft axes. Station clauses shape the LE departure/arrival: root and tip take a tangent vector. Optional trailing :number is the tangency strength (0 = straight, 1 = default fullness). Example: 'root:0.9,-0.3,0;left:auto;right:0.8,0,0.1:0.8'.",
-              "pattern": "^((left|right|full):(auto|-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?)(:-?[0-9]+(\\.[0-9]+)?)?|(root|tip):-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?(:-?[0-9]+(\\.[0-9]+)?)?)(;((left|right|full):(auto|-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?)(:-?[0-9]+(\\.[0-9]+)?)?|(root|tip):-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?,-?[0-9]+(\\.[0-9]+)?(:-?[0-9]+(\\.[0-9]+)?)?))?$"
-            }
-          }
         }
       }
     },
@@ -479,6 +468,55 @@
         },
         "altitude": {
           "$ref": "#/$defs/typedValue"
+        }
+      }
+    },
+    "stationTangencySide": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "auto"
+          ],
+          "properties": {
+            "auto": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "direction"
+          ],
+          "properties": {
+            "direction": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "stationTangency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "$ref": "#/$defs/stationTangencySide"
+        },
+        "right": {
+          "$ref": "#/$defs/stationTangencySide"
         }
       }
     }

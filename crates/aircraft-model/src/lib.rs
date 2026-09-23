@@ -5,14 +5,14 @@ pub mod aircraft;
 pub mod diagnostic;
 pub mod schema;
 pub mod semantic;
-pub mod tangency;
 pub mod typed_value;
 pub mod units;
 
 pub use aircraft::{
     AircraftDefinition, Airfoil, AnalysisCase, Axes, Axis, CenterlineTreatment, Component,
     CoordinateOrigin, CoordinateSystem, Frame, FrameAxes, Interface, OriginKind, Position,
-    SourceSide, Station, Symmetry, SymmetryPlane, TrailingEdge, Wing, WingRole, SCHEMA_ID,
+    SourceSide, Station, StationTangency, StationTangencySide, Symmetry, SymmetryPlane,
+    TrailingEdge, Wing, WingRole, SCHEMA_ID,
 };
 pub use diagnostic::{Code, Diagnostic, Severity};
 pub use typed_value::TypedValue;
