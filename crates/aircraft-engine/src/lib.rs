@@ -341,7 +341,7 @@ impl Engine {
     /// arrives with station i+1's `right`. `auto` on a kink side adopts the
     /// other side's direction if explicit, else the mean of the two panel
     /// sweeps when both are auto, else its own straight sweep (no-op).
-    fn resolve_panel_tangencies(
+    pub fn resolve_panel_tangencies(
         &self,
         component_index: usize,
     ) -> Result<Vec<aircraft_geom::wing::PanelTangency>, Vec<Diagnostic>> {

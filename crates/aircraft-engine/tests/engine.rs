@@ -4,6 +4,7 @@ use aircraft_engine::{
     CancellationToken, Engine, MeshJobError, Patch, TransactionId, GEOMETRY_VERSION,
 };
 use aircraft_geom::quality::MeshQuality;
+use aircraft_geom::step_model::StepSurface;
 use aircraft_graph::FieldKind;
 use aircraft_model::{parse_document, TypedValue};
 
@@ -397,5 +398,107 @@ fn add_parameter_creates_a_usable_scalar() {
             TransactionId(22),
         );
         assert!(!result.committed, "{bad} must be rejected");
+    }
+}
+
+#[test]
+fn step_model_shells_are_closed_and_oriented() {
+    for (symmetry, full, expected_faces, expected_shells) in [
+        (true, false, 5, 1),
+        (true, true, 10, 2),
+        (false, false, 5, 1),
+    ] {
+        let engine = engine();
+        let (_, stations) = engine.evaluated_stations(0).unwrap();
+        let panel_tangencies = engine.resolve_panel_tangencies(0).unwrap();
+        let model = aircraft_geom::step_model::wing_model(
+            "wing",
+            &stations,
+            symmetry,
+            Default::default(),
+            &panel_tangencies,
+            full,
+        )
+        .unwrap_or_else(|diagnostics| panic!("model build failed: {diagnostics:?}"));
+        assert_eq!(model.faces.len(), expected_faces, "faces (full={full})");
+        assert_eq!(model.shells.len(), expected_shells, "shells (full={full})");
+        model.validate().unwrap();
+        let text = meshio::step::write_step(&model);
+        assert!(text.contains("MANIFOLD_SOLID_BREP"));
+        assert!(text.ends_with("END-ISO-10303-21;\n"));
+    }
+}
+
+#[test]
+fn step_skin_knots_are_clamped_and_consistent() {
+    let (doc, _) =
+        parse_document(&std::fs::read_to_string("/dev/shm/cranked-wing-study-001.json").unwrap())
+            .unwrap();
+    let engine = Engine::open(doc).unwrap();
+    let symmetry = true;
+    let (_, stations) = engine.evaluated_stations(0).unwrap();
+    let panel_tangencies = engine.resolve_panel_tangencies(0).unwrap();
+    let model = aircraft_geom::step_model::wing_model(
+        "wing",
+        &stations,
+        symmetry,
+        Default::default(),
+        &panel_tangencies,
+        true,
+    )
+    .unwrap();
+
+    for (index, face) in model.faces.iter().enumerate() {
+        let StepSurface::Nurbs(surface) = &face.surface else {
+            continue;
+        };
+        // Knot-group invariants: each group's multiplicities must sum to the
+        // number of knots in that direction, and to control_count + degree + 1.
+        for (name, knots, degree, ctrl) in [
+            (
+                "u",
+                &surface.u_knots,
+                surface.u_degree,
+                surface.controls.len(),
+            ),
+            (
+                "v",
+                &surface.v_knots,
+                surface.v_degree,
+                surface.controls[0].len(),
+            ),
+        ] {
+            let (mults, uniq) = aircraft_geom::nurbs::knot_groups(knots);
+            assert_eq!(mults.len(), uniq.len(), "face {index} {name}: groups");
+            assert_eq!(
+                mults.iter().sum::<usize>(),
+                knots.len(),
+                "face {index} {name}: multiplicity sum"
+            );
+            assert_eq!(
+                knots.first(),
+                Some(&0.0),
+                "face {index} {name}: must start at 0"
+            );
+            assert_eq!(
+                knots.last(),
+                Some(&1.0),
+                "face {index} {name}: must end at 1"
+            );
+            // Clamped: first and last knot repeated degree+1 times.
+            assert!(
+                knots.iter().take(degree + 1).all(|&k| k == 0.0),
+                "face {index} {name}: leading knots must repeat degree+1 times"
+            );
+            assert!(
+                knots.iter().rev().take(degree + 1).all(|&k| k == 1.0),
+                "face {index} {name}: trailing knots must repeat degree+1 times"
+            );
+            let _ = ctrl;
+            // Knots must be non-decreasing.
+            for pair in knots.windows(2) {
+                assert!(pair[0] <= pair[1], "face {index} {name}: knots decrease");
+            }
+        }
     }
 }

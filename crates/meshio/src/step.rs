@@ -25,9 +25,11 @@ impl Writer {
             edge_ids: std::collections::HashMap::new(),
         };
         writer.out.push_str("ISO-10303-21;\nHEADER;\n");
-        writer.out.push_str("FILE_DESCRIPTION((''),'2;1');\n");
+        writer
+            .out
+            .push_str("FILE_DESCRIPTION(('aircraft wing model'),'2;1');\n");
         writer.out.push_str(&format!(
-            "FILE_NAME('{name}.step','2026-01-01T00:00:00',(''),(''),('aircraft-workspace'),('aircraft-workspace'),(''));\n"
+            "FILE_NAME('{name}.step','2026-01-01T00:00:00',('Author'),(),'{name}','{name}','Unknown');\n"
         ));
         writer.out.push_str(
             "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));\nENDSEC;\nDATA;\n",
@@ -123,22 +125,23 @@ impl Writer {
     }
 
     fn nurbs_surface(&mut self, surface: &aircraft_geom::nurbs::NurbsSurface) -> usize {
-        // Control list: outer index = u, inner = v.
+        // Control list: a list of rows, outer index = u, inner = v
+        // (ISO 10303-42 requires the nested aggregate).
         let rows: Vec<String> = surface
             .controls
             .iter()
             .map(|column| {
-                column
+                let points: Vec<String> = column
                     .iter()
                     .map(|&p| format!("#{}", self.point(homogeneous(p))))
-                    .collect::<Vec<_>>()
-                    .join(",")
+                    .collect();
+                format!("({})", points.join(","))
             })
             .collect();
         let (u_mults, u_knots) = knot_groups(&surface.u_knots);
         let (v_mults, v_knots) = knot_groups(&surface.v_knots);
         self.add(&format!(
-            "B_SPLINE_SURFACE_WITH_KNOTS('',({},{}),({}),.UNSPECIFIED.,.F.,.F.,({}),({}),({}),({}),.UNSPECIFIED.)",
+            "B_SPLINE_SURFACE_WITH_KNOTS('',{},{},({}),.UNSPECIFIED.,.F.,.F.,.F.,({}),({}),({}),({}),.UNSPECIFIED.)",
             surface.u_degree,
             surface.v_degree,
             rows.join(","),
@@ -177,13 +180,16 @@ impl Writer {
     fn face(&mut self, model: &StepModel, face_index: usize) -> usize {
         let face: &StepFaceDef = &model.faces[face_index];
         let surface = self.surface(model, face);
+        // Reference form: the loop references ORIENTED_EDGE entities emitted
+        // once each — inline typed parameters are rejected by strict readers.
         let mut oriented = Vec::with_capacity(face.loop_edges.len());
         for &(edge_index, reversed) in &face.loop_edges {
             let edge_id = self.edge(model, edge_index);
-            oriented.push(format!(
+            let oriented_id = self.add(&format!(
                 "ORIENTED_EDGE('',*,*,#{edge_id},{})",
                 if reversed { ".F." } else { ".T." }
             ));
+            oriented.push(format!("#{oriented_id}"));
         }
         let loop_id = self.add(&format!("EDGE_LOOP('',({}))", oriented.join(",")));
         let bound = self.add(&format!("FACE_OUTER_BOUND('',#{loop_id},.T.)"));
@@ -203,19 +209,22 @@ impl Writer {
 pub fn write_step(model: &StepModel) -> String {
     let mut writer = Writer::new(&model.name);
 
-    // Unit/context preamble (metres, radians, standard uncertainty).
+    // Unit/context preamble (metres, radians, standard uncertainty). Complex
+    // entities list their components alphabetically — readers reject the
+    // instance otherwise.
     writer.add("APPLICATION_CONTEXT('core data for automotive mechanical design processes')");
     let context = writer.add(
         "APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#1)",
     );
-    let length_unit = writer.add("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT($,.METRE.))");
-    let _angle_unit = writer.add("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))");
-    let solid_angle_unit = writer.add("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())");
+    let length_unit = writer.add("( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT($,.METRE.) )");
+    let _angle_unit = writer.add("( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($,.RADIAN.) )");
+    let solid_angle_unit =
+        writer.add("( NAMED_UNIT(*) SI_UNIT($,.STERADIAN.) SOLID_ANGLE_UNIT() )");
     let uncertainty = writer.add(
         "UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-07),#3,'distance_accuracy_value','validation')",
     );
     let context_block = writer.add(
-        "(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNIT_ASSIGNED_CONTEXT((#3,#4,#5))GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#6))REPRESENTATION_CONTEXT('',''))",
+        "( GEOMETRIC_REPRESENTATION_CONTEXT(3) GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#6)) GLOBAL_UNIT_ASSIGNED_CONTEXT((#3,#4,#5)) REPRESENTATION_CONTEXT('','') )",
     );
     let _ = (
         context,
@@ -232,15 +241,18 @@ pub fn write_step(model: &StepModel) -> String {
         .map(|faces| writer.shell(model, faces))
         .collect();
 
-    // Product structure.
-    let product_context = writer.add("PRODUCT_DEFINITION_CONTEXT('part definition',#1,'design')");
+    // Product structure. PRODUCT's frame of reference is a PRODUCT_CONTEXT
+    // (the PRODUCT_DEFINITION_CONTEXT is for the definition only).
+    let product_context = writer.add("PRODUCT_CONTEXT('',#1,'mechanical')");
+    let definition_context =
+        writer.add("PRODUCT_DEFINITION_CONTEXT('part definition',#1,'design')");
     let product = writer.add(&format!(
         "PRODUCT('{}','{}','',(#{}))",
         model.name, model.name, product_context
     ));
     let formation = writer.add(&format!("PRODUCT_DEFINITION_FORMATION('','',#{product})"));
     let definition = writer.add(&format!(
-        "PRODUCT_DEFINITION('design','',#{formation},#{product_context})"
+        "PRODUCT_DEFINITION('design','',#{formation},#{definition_context})"
     ));
     let definition_shape = writer.add(&format!("PRODUCT_DEFINITION_SHAPE('','',#{definition})"));
 

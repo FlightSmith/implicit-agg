@@ -92,16 +92,48 @@ fn ring_rows(ring: &crate::section::Ring, chord: f64) -> Row {
     // by both rows so every curve in the file has the same structure.
     let upper: Vec<[f64; 3]> = ring.points[0..k].to_vec();
     let mask = keep(&upper);
-    let upper = mask.iter().map(|&j| upper[j]).collect();
+    let upper: Vec<[f64; 3]> = mask.iter().map(|&j| upper[j]).collect();
     // Lower row stored TE→LE: index k is the TE lower vertex, 2k-1 the LE.
     let mut lower: Vec<[f64; 3]> = ring.points[k..2 * k].to_vec();
     lower.reverse();
-    let lower = mask.iter().map(|&j| lower[j]).collect();
-    Row { upper, lower }
+    let lower: Vec<[f64; 3]> = mask.iter().map(|&j| lower[j]).collect();
+    Row {
+        upper: thin_row(&upper, 32),
+        lower: thin_row(&lower, 32),
+    }
 }
 
-/// Build the wing's analytic STEP model. The source stations always span the
-/// source half (negative local Y); `full` mirrors it into one shell.
+/// Thin a point row to at most `max_points` entries, evenly striding and
+/// always keeping both endpoints. Interpolating cubics through the full
+/// cosine sample set (hundreds of tightly clustered points) is severely
+/// ill-conditioned and produces astronomical control points.
+fn thin_row(points: &[[f64; 3]], max_points: usize) -> Vec<[f64; 3]> {
+    if points.len() <= max_points {
+        return points.to_vec();
+    }
+    let stride = (((points.len() - 1) as f64) / ((max_points - 1) as f64))
+        .round()
+        .max(1.0) as usize;
+    let mut out = Vec::with_capacity(max_points + 1);
+    let mut i = 0usize;
+    while i < points.len() {
+        out.push(points[i]);
+        if points.len() - 1 - i <= stride {
+            break;
+        }
+        i += stride;
+    }
+    let last = points[points.len() - 1];
+    if out.last() != Some(&last) {
+        out.push(last);
+    }
+    out
+}
+
+/// Build the wing's analytic STEP model: one closed solid per half-wing
+/// (NURBS upper/lower skins, NURBS TE band, planar caps). The source
+/// stations span the source half (negative local Y); `full` appends an
+/// independent mirrored solid on the other side of the symmetry plane.
 #[allow(clippy::too_many_arguments)]
 pub fn wing_model(
     name: &str,
@@ -131,25 +163,17 @@ pub fn wing_model(
         span_subdivisions: span_subdivisions(stations, tolerances.max_edge_length),
     };
     let rings = loft_rings(stations, &quality, panel_tangencies);
-    let mut rows: Vec<Row> = rings
+    let rows: Vec<Row> = rings
         .iter()
         .map(|r| ring_rows(r, row_chord(&rings)))
         .collect();
-
-    if full {
-        // Mirror rows (skip the shared root row) so the surface wraps
-        // root → tip → mirrored tip → root.
-        let mirrored: Vec<Row> = rows[1..].iter().rev().map(mirror_row).collect();
-        rows.extend(mirrored);
-    }
-
     let last = rows.len() - 1;
 
-    // Boundary curves: rows share u-parameters, so the skin's natural
+    // Section curves: rows share chordwise parameters, so the skins' natural
     // boundaries coincide with these curves exactly.
+    let params = crate::profile::cosine_samples(rows[0].upper.len());
     let mut upper_curves: Vec<NurbsCurve> = Vec::with_capacity(rows.len());
     let mut lower_curves: Vec<NurbsCurve> = Vec::with_capacity(rows.len());
-    let params = crate::profile::cosine_samples(rows[0].upper.len());
     for row in &rows {
         let (upper, _) =
             interpolate_cubic(&row.upper, &params, 3).map_err(|diagnostic| vec![diagnostic])?;
@@ -159,22 +183,32 @@ pub fn wing_model(
         lower_curves.push(lower);
     }
 
+    // Spanwise paths all share the LE-based parameters, so each path is
+    // exactly the corresponding v-boundary of both skins and the paths
+    // themselves skin into the TE band.
     let le_points: Vec<[f64; 3]> = rows.iter().map(|row| row.upper[0]).collect();
-    let te_points: Vec<[f64; 3]> = rows
+    let teu_points: Vec<[f64; 3]> = rows
         .iter()
         .map(|row| *row.upper.last().expect("non-empty"))
         .collect();
-    let (le_path, _) = interpolate_cubic(&le_points, &nurbs_chord_params(&le_points), 3)
-        .map_err(|diagnostic| vec![diagnostic])?;
-    let (te_path, _) = interpolate_cubic(&te_points, &nurbs_chord_params(&te_points), 3)
+    let tel_points: Vec<[f64; 3]> = rows
+        .iter()
+        .map(|row| *row.lower.last().expect("non-empty"))
+        .collect();
+    let span_params = nurbs_chord_params(&le_points);
+    let (le_path, _) =
+        interpolate_cubic(&le_points, &span_params, 3).map_err(|diagnostic| vec![diagnostic])?;
+    let (teu_path, _) =
+        interpolate_cubic(&teu_points, &span_params, 3).map_err(|diagnostic| vec![diagnostic])?;
+    let (tel_path, _) =
+        interpolate_cubic(&tel_points, &span_params, 3).map_err(|diagnostic| vec![diagnostic])?;
+
+    let skins = skin(&upper_curves, &span_params).map_err(|diagnostic| vec![diagnostic])?;
+    let lower_skins = skin(&lower_curves, &span_params).map_err(|diagnostic| vec![diagnostic])?;
+    let te_surface = skin(&[teu_path.clone(), tel_path.clone()], &[0.0, 1.0])
         .map_err(|diagnostic| vec![diagnostic])?;
 
-    let skins = skin(&upper_curves, &nurbs_chord_params(&le_points))
-        .map_err(|diagnostic| vec![diagnostic])?;
-    let lower_skins = skin(&lower_curves, &nurbs_chord_params(&le_points))
-        .map_err(|diagnostic| vec![diagnostic])?;
-
-    // Vertices at the six section-boundary points.
+    // Vertices at the six section-boundary points (root, then tip).
     let le_start = rows[0].upper[0];
     let teu_start = rows[0].upper[rows[0].upper.len() - 1];
     let tel_start = rows[0].lower[rows[0].lower.len() - 1];
@@ -189,7 +223,6 @@ pub fn wing_model(
         faces: Vec::new(),
         shells: Vec::new(),
     };
-    let _ = &mut model;
 
     let v_le_start = 0usize;
     let v_teu_start = 1usize;
@@ -200,7 +233,8 @@ pub fn wing_model(
 
     // Shared edges.
     let e_le = model.push_edge(StepCurve::Nurbs(le_path), v_le_start, v_le_end);
-    let e_te = model.push_edge(StepCurve::Nurbs(te_path), v_teu_start, v_teu_end);
+    let e_teu = model.push_edge(StepCurve::Nurbs(teu_path), v_teu_start, v_teu_end);
+    let e_tel = model.push_edge(StepCurve::Nurbs(tel_path), v_tel_start, v_tel_end);
     let e_root_upper = model.push_edge(
         StepCurve::Nurbs(upper_curves[0].clone()),
         v_le_start,
@@ -228,25 +262,9 @@ pub fn wing_model(
     );
     let e_tip_te_line = model.push_edge(StepCurve::Line(teu_end, tel_end), v_teu_end, v_tel_end);
 
-    // TE face: a ruled (bilinear) surface between the two TE paths.
-    let te_surface = StepSurface::Nurbs(NurbsSurface {
-        u_degree: 1,
-        v_degree: 1,
-        u_knots: vec![0.0, 0.0, 1.0, 1.0],
-        v_knots: vec![0.0, 0.0, 1.0, 1.0],
-        controls: vec![
-            vec![
-                [teu_start[0], teu_start[1], teu_start[2], 1.0],
-                [tel_start[0], tel_start[1], tel_start[2], 1.0],
-            ],
-            vec![
-                [teu_end[0], teu_end[1], teu_end[2], 1.0],
-                [tel_end[0], tel_end[1], tel_end[2], 1.0],
-            ],
-        ],
-    });
-
-    // Cap planes from the end rings (Newell normal).
+    // Cap planes from the end rings. Both rings wind upper LE→TE then lower
+    // TE→LE, so their Newell normal points toward positive span: outward at
+    // the root cap (symmetry plane), inward at the tip cap, which flips it.
     let tip_ring_points: Vec<[f64; 3]> = rows[last]
         .upper
         .iter()
@@ -259,120 +277,197 @@ pub fn wing_model(
         .chain(rows[0].lower.iter().rev())
         .copied()
         .collect();
+    let outward = crate::mesh::vnormalize(polygon_normal(&root_ring_points));
     let tip_plane = StepSurface::Plane {
         origin: centroid(&tip_ring_points),
-        normal: crate::mesh::vnormalize(polygon_normal(&tip_ring_points)),
+        normal: [-outward[0], -outward[1], -outward[2]],
     };
     let root_plane = StepSurface::Plane {
         origin: centroid(&root_ring_points),
-        normal: crate::mesh::vnormalize(polygon_normal(&root_ring_points)),
+        normal: outward,
     };
 
-    // Upper skin: LE → tip → TE(rev) → root-upper(rev).
+    // Upper skin: LE, tip upper, TE back, root upper back — wound clockwise
+    // in (u, v) so the face normal points up, out of the wing.
     model.faces.push(StepFaceDef {
         surface: StepSurface::Nurbs(skins),
         loop_edges: vec![
             (e_le, false),
             (e_tip_upper, false),
-            (e_te, true),
+            (e_teu, true),
             (e_root_upper, true),
         ],
     });
-    // Lower skin: LE → root-lower → TE → tip-lower(rev).
+    // Lower skin: root lower, TE, tip lower back, LE back — counter-clockwise
+    // in (u, v), face normal points down, out of the wing.
     model.faces.push(StepFaceDef {
         surface: StepSurface::Nurbs(lower_skins),
         loop_edges: vec![
-            (e_le, false),
             (e_root_lower, false),
-            (e_te, false),
+            (e_tel, false),
             (e_tip_lower, true),
+            (e_le, true),
         ],
     });
-    // TE face: TE path, tip line, TE path back, root line back.
+    // TE band: upper TE path, tip line, lower TE path back, root line back.
     model.faces.push(StepFaceDef {
-        surface: te_surface,
+        surface: StepSurface::Nurbs(te_surface),
         loop_edges: vec![
-            (e_te, false),
+            (e_teu, false),
             (e_tip_te_line, false),
-            (e_te, true),
+            (e_tel, true),
             (e_root_te_line, true),
         ],
     });
+    // Tip cap (traversed against the skin so shared edges oppose).
+    model.faces.push(StepFaceDef {
+        surface: tip_plane,
+        loop_edges: vec![
+            (e_tip_upper, true),
+            (e_tip_lower, false),
+            (e_tip_te_line, true),
+        ],
+    });
+    // Root cap on the symmetry plane.
+    model.faces.push(StepFaceDef {
+        surface: root_plane,
+        loop_edges: vec![
+            (e_root_upper, false),
+            (e_root_te_line, false),
+            (e_root_lower, true),
+        ],
+    });
+    model.shells.push((0..model.faces.len()).collect());
 
     if full {
-        // Mirror the four surface faces (skip the root cap: the symmetry
-        // plane gets one shared cap face) into a second half-shell, then
-        // close with the root cap — one shell, one solid.
-        let mirrored_faces: Vec<StepFaceDef> = model.faces[..3].iter().map(mirror_face).collect();
-        for face in &mirrored_faces {
-            model.faces.push(face.clone());
-        }
-        model.faces.push(StepFaceDef {
-            surface: root_plane,
-            loop_edges: vec![
-                (e_root_upper, false),
-                (e_root_te_line, false),
-                (e_root_lower, true),
-            ],
-        });
-        let face_count = model.faces.len();
-        model.shells.push((0..face_count).collect());
-    } else {
-        // Half model: cap the tip, then the symmetry plane closes it.
-        model.faces.push(StepFaceDef {
-            surface: tip_plane,
-            loop_edges: vec![
-                (e_tip_upper, false),
-                (e_tip_te_line, false),
-                (e_tip_lower, true),
-            ],
-        });
-        model.faces.push(StepFaceDef {
-            surface: root_plane,
-            loop_edges: vec![
-                (e_root_upper, false),
-                (e_root_te_line, false),
-                (e_root_lower, true),
-            ],
-        });
-        let face_count = model.faces.len();
-        model.shells.push((0..face_count).collect());
+        mirror_solid(&mut model);
     }
+
+    model.validate().map_err(|message| {
+        vec![Diagnostic::error(Code::MeshFailure, message).with_subject(name.to_string())]
+    })?;
     Ok(model)
 }
 
-fn mirror_face(face: &StepFaceDef) -> StepFaceDef {
-    StepFaceDef {
-        surface: match &face.surface {
-            StepSurface::Nurbs(surface) => {
-                let mut mirrored = surface.clone();
-                for column in mirrored.controls.iter_mut() {
-                    for point in column.iter_mut() {
-                        point[1] = -point[1];
-                    }
-                }
-                StepSurface::Nurbs(mirrored)
+/// Append an independent mirrored copy of the first shell: a second solid on
+/// the other side of the symmetry plane, with its own vertices, edges, and
+/// faces. Loop order reverses so the mirrored faces stay outward-oriented.
+fn mirror_solid(model: &mut StepModel) {
+    let vertex_base = model.vertices.len();
+    let cloned = model.vertices.clone();
+    for point in cloned {
+        model.vertices.push([point[0], -point[1], point[2]]);
+    }
+    let mut edge_map = Vec::with_capacity(model.edges.len());
+    let edges = model.edges.clone();
+    for edge in edges {
+        let index = model.push_edge(
+            mirror_curve(&edge.curve),
+            vertex_base + edge.start,
+            vertex_base + edge.end,
+        );
+        edge_map.push(index);
+    }
+    let face_base = model.faces.len();
+    let faces = model.faces.clone();
+    for face in &faces {
+        model.faces.push(StepFaceDef {
+            surface: mirror_surface(&face.surface),
+            loop_edges: face
+                .loop_edges
+                .iter()
+                .rev()
+                .map(|&(edge, reversed)| (edge_map[edge], !reversed))
+                .collect(),
+        });
+    }
+    model.shells.push((face_base..model.faces.len()).collect());
+}
+
+fn mirror_curve(curve: &StepCurve) -> StepCurve {
+    let mirror_point = |point: [f64; 3]| [point[0], -point[1], point[2]];
+    match curve {
+        StepCurve::Line(start, end) => StepCurve::Line(mirror_point(*start), mirror_point(*end)),
+        StepCurve::Nurbs(nurbs) => {
+            let mut mirrored = nurbs.clone();
+            for point in mirrored.controls.iter_mut() {
+                point[1] = -point[1];
             }
-            StepSurface::Plane { origin, normal } => StepSurface::Plane {
-                origin: [origin[0], -origin[1], origin[2]],
-                normal: [normal[0], -normal[1], normal[2]],
-            },
-        },
-        loop_edges: face
-            .loop_edges
-            .iter()
-            .map(|(edge, reversed)| (*edge, !reversed))
-            .collect(),
+            StepCurve::Nurbs(mirrored)
+        }
     }
 }
 
-fn mirror_row(row: &Row) -> Row {
-    let mirror = |points: &[[f64; 3]]| -> Vec<[f64; 3]> {
-        points.iter().map(|p| [p[0], -p[1], p[2]]).collect()
-    };
-    Row {
-        upper: mirror(&row.upper),
-        lower: mirror(&row.lower),
+fn mirror_surface(surface: &StepSurface) -> StepSurface {
+    match surface {
+        StepSurface::Nurbs(nurbs) => {
+            let mut mirrored = nurbs.clone();
+            for column in mirrored.controls.iter_mut() {
+                for point in column.iter_mut() {
+                    point[1] = -point[1];
+                }
+            }
+            StepSurface::Nurbs(mirrored)
+        }
+        StepSurface::Plane { origin, normal } => StepSurface::Plane {
+            origin: [origin[0], -origin[1], origin[2]],
+            normal: [normal[0], -normal[1], normal[2]],
+        },
+    }
+}
+
+impl StepModel {
+    /// Topological soundness checks: every face loop is a closed walk over
+    /// its vertices, and every shell uses each edge exactly twice, once per
+    /// sense. CAD readers reject the shell otherwise (or worse, segfault).
+    pub fn validate(&self) -> Result<(), String> {
+        for (face_index, face) in self.faces.iter().enumerate() {
+            if face.loop_edges.len() < 3 {
+                return Err(format!("face {face_index}: loop needs at least 3 edges"));
+            }
+            let walk = |edge_index: usize, reversed: bool| {
+                let edge = &self.edges[edge_index];
+                if reversed {
+                    (edge.end, edge.start)
+                } else {
+                    (edge.start, edge.end)
+                }
+            };
+            let (first_entry, first_exit) = walk(face.loop_edges[0].0, face.loop_edges[0].1);
+            let mut cursor = first_exit;
+            for &(edge_index, reversed) in face.loop_edges.iter().skip(1) {
+                let (entry, exit) = walk(edge_index, reversed);
+                if cursor != entry {
+                    return Err(format!(
+                        "face {face_index}: loop jumps at edge {edge_index} ({cursor} → {entry})"
+                    ));
+                }
+                cursor = exit;
+            }
+            if cursor != first_entry {
+                return Err(format!(
+                    "face {face_index}: loop does not close ({cursor} ≠ {first_entry})"
+                ));
+            }
+        }
+        for (shell_index, shell) in self.shells.iter().enumerate() {
+            let mut usage: std::collections::HashMap<usize, [usize; 2]> =
+                std::collections::HashMap::new();
+            for &face_index in shell {
+                for &(edge_index, reversed) in &self.faces[face_index].loop_edges {
+                    let counts = usage.entry(edge_index).or_default();
+                    counts[if reversed { 1 } else { 0 }] += 1;
+                }
+            }
+            for (edge_index, [forward, backward]) in usage {
+                if forward != 1 || backward != 1 {
+                    return Err(format!(
+                        "shell {shell_index}: edge {edge_index} used {forward}× forward, {backward}× backward"
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }
 

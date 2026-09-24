@@ -51,8 +51,10 @@ fn averaging_knots(params: &[f64], degree: usize) -> Vec<f64> {
     let n = params.len() - 1; // last point index
     let mut knots = vec![0.0; n + degree + 2];
     let last = knots.len();
+    // Averaging (The NURBS Book eq. 9.8): knot i uses the `degree` params
+    // immediately before it.
     for i in degree + 1..last {
-        let j = i - degree - 1; // 0-based interior index
+        let j = i - degree; // first param in the averaging window
         let mut sum = 0.0;
         for k in j..j + degree {
             sum += params[k.min(n)];
@@ -290,4 +292,19 @@ pub fn evaluate_surface(surface: &NurbsSurface, u: f64, v: f64) -> [f64; 3] {
         controls: row_points,
     };
     evaluate_curve(&u_curve, u)
+}
+
+/// Collapse a clamped knot vector into (multiplicities, unique knots).
+pub fn knot_groups(knots: &[f64]) -> (Vec<usize>, Vec<f64>) {
+    let mut mults = Vec::new();
+    let mut uniq = Vec::new();
+    for (index, &knot) in knots.iter().enumerate() {
+        if index > 0 && (knot - knots[index - 1]).abs() < 1e-12 {
+            *mults.last_mut().expect("non-empty") += 1;
+        } else {
+            mults.push(1);
+            uniq.push(knot);
+        }
+    }
+    (mults, uniq)
 }
