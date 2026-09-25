@@ -123,8 +123,12 @@ pub fn wing_model(
     let last = rows.len() - 1;
 
     // Section curves: rows share chordwise parameters, so the skins' natural
-    // boundaries coincide with these curves exactly.
-    let params = crate::profile::cosine_samples(rows[0].upper.len());
+    // boundaries coincide with these curves exactly. The parameters are the
+    // root row's chord lengths, not the sample stations' x fractions: with
+    // cosine sampling the x gaps at the nose are ~100x smaller than at
+    // mid-chord, and x-parameterized interpolation rings there (a scalloped
+    // leading edge). Chord-length parameters equalize the spacing.
+    let params = nurbs_chord_params(&rows[0].upper);
     let mut upper_curves: Vec<NurbsCurve> = Vec::with_capacity(rows.len());
     let mut lower_curves: Vec<NurbsCurve> = Vec::with_capacity(rows.len());
     for row in &rows {
