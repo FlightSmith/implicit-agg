@@ -5,7 +5,7 @@
 
 pub mod report;
 
-use aircraft_geom::quality::MeshQuality;
+pub use aircraft_geom::quality::{ExportTolerances, MeshQuality};
 use aircraft_geom::section::TrailingEdgeSpec;
 use aircraft_geom::wing::EvaluatedStation;
 use aircraft_geom::{build_wing_mesh, FaceSource, ProfileCurve, WingMesh};

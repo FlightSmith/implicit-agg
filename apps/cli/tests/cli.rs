@@ -79,3 +79,54 @@ fn cycle_diagnostic_names_the_chain() {
         "chain must name the involved stations:\n{output}"
     );
 }
+
+#[test]
+fn export_writes_geometry_files() {
+    let dir = std::env::temp_dir().join(format!(
+        "aircraft-cli-export-{}-{}",
+        std::process::id(),
+        line!()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = repo_path("examples/cranked-wing.v0.1.json");
+
+    // STEP by extension inference.
+    let step = dir.join("wing.step");
+    let (code, output) = aircraft_cli::run(["export", &doc, step.to_str().unwrap()]);
+    assert_eq!(code, aircraft_cli::EXIT_VALID, "output:\n{output}");
+    assert!(output.contains("wrote "), "output:\n{output}");
+    let text = std::fs::read_to_string(&step).unwrap();
+    assert!(text.contains("MANIFOLD_SOLID_BREP"), "no solid in STEP");
+
+    // Full model with an explicit mesh format.
+    let obj = dir.join("wing-full.obj");
+    let (code, output) = aircraft_cli::run([
+        "export",
+        &doc,
+        obj.to_str().unwrap(),
+        "--format",
+        "obj",
+        "--full",
+    ]);
+    assert_eq!(code, aircraft_cli::EXIT_VALID, "output:\n{output}");
+    let text = std::fs::read_to_string(&obj).unwrap();
+    assert!(text.contains("v "), "no vertices in OBJ");
+
+    // Unknown extension without --format is a usage failure.
+    let bogus = dir.join("wing.bogus");
+    let (code, output) = aircraft_cli::run(["export", &doc, bogus.to_str().unwrap()]);
+    assert_eq!(code, aircraft_cli::EXIT_FAILURE, "output:\n{output}");
+    assert!(output.contains("--format"), "output:\n{output}");
+
+    // An invalid document fails before anything is written.
+    let bad = dir.join("bad.step");
+    let (code, output) = aircraft_cli::run([
+        "export",
+        &repo_path("examples/fixtures/invalid/zero-chord.json"),
+        bad.to_str().unwrap(),
+    ]);
+    assert_eq!(code, aircraft_cli::EXIT_DIAGNOSTICS, "output:\n{output}");
+    assert!(!bad.exists(), "invalid document must not write a file");
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}

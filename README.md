@@ -57,7 +57,7 @@ Milestones 0, 1, and 2 are implemented as a Rust workspace plus a web workspace:
 - `crates/aircraft-engine` — the service API: transactional patches with affected-node reporting, cancellation tokens and stale-revision guards, content-addressed mesh cache, selection tracing, derived reports.
 - `crates/aircraft-wasm` — the engine bound for WebAssembly; the browser compute core, with a command surface mirroring the planned Tauri IPC API.
 - `apps/desktop` — the live workspace (React + TypeScript + three.js via Vite): design tree, 3D viewport with symmetry-plane overlay and mesh picking traced to source stations, an inspector with literal/parameter/expression value modes, adaptive sliders, undo/redo, live diagnostics, and STL/OBJ/GLB export.
-- `apps/cli` — headless `validate`, `evaluate`, and `report` commands; the fixture harness under `examples/fixtures/`.
+- `apps/cli` — headless `validate`, `evaluate`, `report`, and `export` (STEP/STL/OBJ/GLB batch writer) commands; the fixture harness under `examples/fixtures/`.
 
 ### Running the live workspace
 

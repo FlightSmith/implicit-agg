@@ -1,6 +1,6 @@
-//! Headless driver for the aircraft design core: validation and evaluation of
-//! documents without any UI. This is the Milestone verification harness used
-//! by CI and the fixture suite.
+//! Headless driver for the aircraft design core: validation, evaluation, and
+//! geometry export without any UI. This is the Milestone verification harness
+//! used by CI and the fixture suite, and the batch entry point for exports.
 
 use aircraft_graph::{build, check_predicates, evaluate_graph, FieldKind};
 use aircraft_model::aircraft::Component;
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "aircraft",
-    about = "Validate and evaluate aircraft definition documents",
+    about = "Validate, evaluate, and export aircraft definition documents",
     version
 )]
 struct Cli {
@@ -28,6 +28,40 @@ enum Command {
     Evaluate { path: PathBuf },
     /// Validate, then generate geometry and print the derived report.
     Report { path: PathBuf },
+    /// Validate, then write the wing's geometry: STEP analytic solids or
+    /// STL/OBJ/GLB meshes.
+    Export {
+        path: PathBuf,
+        /// Output file; the format defaults to the file extension.
+        output: PathBuf,
+        /// Output format override (step, stl, obj, glb).
+        #[arg(short, long)]
+        format: Option<FormatArg>,
+        /// Write the mirrored full model instead of the source half.
+        #[arg(long)]
+        full: bool,
+        /// Mesh tessellation tier (ignored for STEP).
+        #[arg(short, long, default_value = "export")]
+        quality: QualityArg,
+        /// Wing component index.
+        #[arg(long, default_value_t = 0)]
+        component: usize,
+    },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum FormatArg {
+    Step,
+    Stl,
+    Obj,
+    Glb,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum QualityArg {
+    Interactive,
+    Settled,
+    Export,
 }
 
 /// Exit codes: 0 valid, 1 error diagnostics, 2 usage or I/O failure.
@@ -54,9 +88,124 @@ where
         Command::Validate { path } => (path, CommandKind::Validate),
         Command::Evaluate { path } => (path, CommandKind::Evaluate),
         Command::Report { path } => (path, CommandKind::Report),
+        Command::Export {
+            path,
+            output,
+            format,
+            full,
+            quality,
+            component,
+        } => {
+            let format = match format {
+                Some(format) => format,
+                None => match FormatArg::from_extension(&output) {
+                    Some(format) => format,
+                    None => {
+                        return (
+                            EXIT_FAILURE,
+                            format!(
+                                "cannot infer a format from {}: use --format step|stl|obj|glb\n",
+                                output.display()
+                            ),
+                        );
+                    }
+                },
+            };
+            (
+                path,
+                CommandKind::Export(ExportOptions {
+                    output,
+                    format,
+                    full,
+                    quality,
+                    component,
+                }),
+            )
+        }
     };
     let code = run_command(&path, command, &mut output);
     (code, output)
+}
+
+/// Everything the export subcommand needs beyond the document path.
+struct ExportOptions {
+    output: PathBuf,
+    format: FormatArg,
+    full: bool,
+    quality: QualityArg,
+    component: usize,
+}
+
+/// Write the wing's geometry in the requested format. Returns the exit code;
+/// on success the caller still prints the usual summary tail.
+fn export_wing(
+    out: &mut String,
+    doc: &aircraft_model::AircraftDefinition,
+    options: &ExportOptions,
+) -> i32 {
+    let mut engine = match aircraft_engine::Engine::open(doc.clone()) {
+        Ok(engine) => engine,
+        Err(errors) => {
+            print_diagnostics(out, &errors);
+            return EXIT_DIAGNOSTICS;
+        }
+    };
+    let token = aircraft_engine::CancellationToken::default();
+    let name = options
+        .output
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("wing");
+    let bytes = match options.format {
+        FormatArg::Step => engine
+            .export_step(options.component, options.full, &token)
+            .map(|text| text.into_bytes()),
+        FormatArg::Stl => engine.export(
+            options.component,
+            options.quality.into(),
+            options.full,
+            meshio::MeshFormat::StlBinary,
+            name,
+            &token,
+        ),
+        FormatArg::Obj => engine.export(
+            options.component,
+            options.quality.into(),
+            options.full,
+            meshio::MeshFormat::Obj,
+            name,
+            &token,
+        ),
+        FormatArg::Glb => engine.export(
+            options.component,
+            options.quality.into(),
+            options.full,
+            meshio::MeshFormat::Glb,
+            name,
+            &token,
+        ),
+    };
+    let bytes = match bytes {
+        Ok(bytes) => bytes,
+        Err(aircraft_engine::MeshJobError::Failed(diagnostics)) => {
+            print_diagnostics(out, &diagnostics);
+            return EXIT_DIAGNOSTICS;
+        }
+        Err(error) => {
+            let _ = writeln!(out, "export failed: {error:?}");
+            return EXIT_FAILURE;
+        }
+    };
+    match std::fs::write(&options.output, bytes) {
+        Ok(()) => {
+            let _ = writeln!(out, "wrote {}", options.output.display());
+            EXIT_VALID
+        }
+        Err(error) => {
+            let _ = writeln!(out, "cannot write {}: {error}", options.output.display());
+            EXIT_FAILURE
+        }
+    }
 }
 
 fn run_command(path: &Path, command: CommandKind, out: &mut String) -> i32 {
@@ -131,6 +280,13 @@ fn run_command(path: &Path, command: CommandKind, out: &mut String) -> i32 {
                 }
             }
         }
+        CommandKind::Export(options) => {
+            let code = export_wing(out, &doc, &options);
+            if code != EXIT_VALID {
+                let _ = writeln!(out, "result: invalid");
+                return code;
+            }
+        }
     }
     print_summary(out, &doc, &diagnostics);
     print_diagnostics(out, &diagnostics);
@@ -144,11 +300,11 @@ fn run_command(path: &Path, command: CommandKind, out: &mut String) -> i32 {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 enum CommandKind {
     Validate,
     Evaluate,
     Report,
+    Export(ExportOptions),
 }
 
 impl CommandKind {
@@ -157,6 +313,35 @@ impl CommandKind {
             CommandKind::Validate => "validation",
             CommandKind::Evaluate => "evaluation",
             CommandKind::Report => "report",
+            CommandKind::Export(_) => "export",
+        }
+    }
+}
+
+impl FormatArg {
+    fn from_extension(path: &Path) -> Option<Self> {
+        match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+            "step" | "stp" => Some(Self::Step),
+            "stl" => Some(Self::Stl),
+            "obj" => Some(Self::Obj),
+            "glb" | "gltf" => Some(Self::Glb),
+            _ => None,
+        }
+    }
+}
+
+impl From<QualityArg> for aircraft_engine::MeshQuality {
+    fn from(quality: QualityArg) -> Self {
+        match quality {
+            QualityArg::Interactive => Self::Interactive,
+            // The auto-settle tier mirror of the wasm binding: finer than the
+            // live preview, cheaper than a full export run.
+            QualityArg::Settled => Self::Export(aircraft_engine::ExportTolerances {
+                max_chordal_deviation: Some(2.5e-3),
+                max_edge_length: Some(0.6),
+                max_normal_angle_deg: Some(10.0),
+            }),
+            QualityArg::Export => Self::Export(Default::default()),
         }
     }
 }
