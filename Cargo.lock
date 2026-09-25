@@ -33,6 +33,7 @@ dependencies = [
  "aircraft-graph",
  "aircraft-model",
  "clap",
+ "meshio",
 ]
 
 [[package]]
