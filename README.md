@@ -59,13 +59,23 @@ Milestones 0, 1, and 2 are implemented as a Rust workspace plus a web workspace:
 - `apps/desktop` — the live workspace (React + TypeScript + three.js via Vite): design tree, 3D viewport with symmetry-plane overlay and mesh picking traced to source stations, an inspector with literal/parameter/expression value modes, adaptive sliders, undo/redo, live diagnostics, and STL/OBJ/GLB export.
 - `apps/cli` — headless `validate`, `evaluate`, `report`, and `export` (STEP/STL/OBJ/GLB batch writer) commands; the fixture harness under `examples/fixtures/`.
 
+### Prerequisites
+
+- **Rust** (stable, edition 2021) — [rustup](https://rustup.rs):
+  `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **wasm-pack** — builds the browser compute core: `cargo install wasm-pack`
+- **Node.js 18+ with npm** — [nodejs.org](https://nodejs.org) or `nvm install --lts`
+- **Playwright chromium** — one-time, only for the E2E suite:
+  `npx playwright install chromium` (run inside `apps/desktop`)
+
 ### Running the live workspace
 
 ```sh
 cd apps/desktop
 npm install
-npx playwright install chromium   # one-time, for the E2E suite
 npm run dev                       # wasm core + vite dev server on :5173
+npm run build                     # production bundle in dist/
+npm run preview                   # serve the production bundle
 npm run e2e                       # headless E2E suite against the production build
 ```
 
@@ -80,10 +90,21 @@ comes next; see the [implementation plan](docs/10-implementation-plan.md).
 
 ### Building and testing
 
+Everything compiles with cargo alone — the workspace builds and tests
+headlessly; Node is only needed for the web app.
+
 ```sh
-cargo test --workspace                 # unit, integration, and fixture tests
+cargo build --workspace               # every crate + the CLI (debug)
+cargo build --release -p aircraft-cli # standalone batch exporter: target/release/aircraft
+cargo test --workspace                # unit, integration, and fixture tests
 cargo clippy --workspace --all-targets # lint gate (CI runs this with -D warnings)
+
 cargo run -p aircraft-cli -- validate examples/cranked-wing.v0.1.json
 cargo run -p aircraft-cli -- evaluate examples/cranked-wing.v0.1.json
-cargo run -p aircraft-cli -- report examples/cranked-wing.v0.1.json
+cargo run -p aircraft-cli -- report  examples/cranked-wing.v0.1.json
+
+# Batch geometry export, no UI required:
+cargo run -p aircraft-cli -- export examples/cranked-wing.v0.1.json wing.step
+cargo run -p aircraft-cli -- export examples/cranked-wing.v0.1.json wing.step --full
+cargo run -p aircraft-cli -- export examples/cranked-wing.v0.1.json wing.stl --quality export
 ```
