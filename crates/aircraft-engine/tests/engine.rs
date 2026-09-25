@@ -502,3 +502,41 @@ fn step_skin_knots_are_clamped_and_consistent() {
         }
     }
 }
+
+#[test]
+fn step_export_survives_large_tip_twist() {
+    // Regression: the STEP rows used to thin per ring, so a strongly twisted
+    // station kept fewer samples than the root and the shared chordwise
+    // parameterization indexed out of bounds. Rows now keep every ring
+    // sample, so the parameter grid is identical for all stations.
+    let (doc, _) = parse_document(EXAMPLE).unwrap();
+    let mut engine = Engine::open(doc).unwrap();
+    for degrees in [-4.0, 0.0, 10.0, 25.0, 45.0, 90.0] {
+        let result = engine.apply_patch(
+            Patch::SetStationField {
+                component_index: 0,
+                station_index: 2,
+                field: FieldKind::Twist,
+                value: TypedValue::number(degrees),
+            },
+            TransactionId(1),
+        );
+        assert!(
+            result.committed,
+            "twist {degrees} patch rejected: {:?}",
+            result.diagnostics
+        );
+        let step = engine.export_step(0, false, &CancellationToken::default());
+        let text = step.unwrap_or_else(|error| {
+            panic!("STEP export at {degrees} deg tip twist failed: {error:?}")
+        });
+        assert!(
+            text.len() > 10_000,
+            "STEP at {degrees} deg is suspiciously small"
+        );
+        assert!(
+            text.contains("MANIFOLD_SOLID_BREP"),
+            "STEP at {degrees} deg lost its solid"
+        );
+    }
+}

@@ -47,18 +47,16 @@ pub struct StepModel {
     pub shells: Vec<Vec<usize>>,
 }
 
-/// Tolerances for the analytic export: chordal deviation drives the chord
-/// sampling, the edge length the spanwise station count.
+/// Tolerances for the analytic export: the edge length drives the spanwise
+/// station count; chordwise sampling is fixed at [`STEP_CHORD_SAMPLES`].
 #[derive(Debug, Clone, Copy)]
 pub struct StepTolerances {
-    pub max_chordal_deviation: f64,
     pub max_edge_length: f64,
 }
 
 impl Default for StepTolerances {
     fn default() -> Self {
         StepTolerances {
-            max_chordal_deviation: 2.5e-3,
             max_edge_length: 0.6,
         }
     }
@@ -75,59 +73,17 @@ struct Row {
     lower: Vec<[f64; 3]>,
 }
 
-fn ring_rows(ring: &crate::section::Ring, chord: f64) -> Row {
+fn ring_rows(ring: &crate::section::Ring) -> Row {
     let k = ring.points.len() / 2;
-    let keep = |points: &[[f64; 3]]| -> Vec<usize> {
-        let mut keep = vec![0usize];
-        for j in 1..points.len() {
-            let gap = points[j][0] - points[j - 1][0];
-            if gap > 1.0e-6 * chord {
-                keep.push(j);
-            }
-        }
-        keep
-    };
-
-    // The mask is computed once (upper LE→TE x-monotone samples) and shared
-    // by both rows so every curve in the file has the same structure.
+    // Rows keep every ring sample: the ring's vertex layout is
+    // landmark-aligned (upper LE→TE, lower TE→LE), so both rows sit exactly
+    // on the shared cosine parameter grid and every row in the wing has the
+    // same point count — the shared-parameters invariant of the skins.
     let upper: Vec<[f64; 3]> = ring.points[0..k].to_vec();
-    let mask = keep(&upper);
-    let upper: Vec<[f64; 3]> = mask.iter().map(|&j| upper[j]).collect();
     // Lower row stored TE→LE: index k is the TE lower vertex, 2k-1 the LE.
     let mut lower: Vec<[f64; 3]> = ring.points[k..2 * k].to_vec();
     lower.reverse();
-    let lower: Vec<[f64; 3]> = mask.iter().map(|&j| lower[j]).collect();
-    Row {
-        upper: thin_row(&upper, 32),
-        lower: thin_row(&lower, 32),
-    }
-}
-
-/// Thin a point row to at most `max_points` entries, evenly striding and
-/// always keeping both endpoints. Interpolating cubics through the full
-/// cosine sample set (hundreds of tightly clustered points) is severely
-/// ill-conditioned and produces astronomical control points.
-fn thin_row(points: &[[f64; 3]], max_points: usize) -> Vec<[f64; 3]> {
-    if points.len() <= max_points {
-        return points.to_vec();
-    }
-    let stride = (((points.len() - 1) as f64) / ((max_points - 1) as f64))
-        .round()
-        .max(1.0) as usize;
-    let mut out = Vec::with_capacity(max_points + 1);
-    let mut i = 0usize;
-    while i < points.len() {
-        out.push(points[i]);
-        if points.len() - 1 - i <= stride {
-            break;
-        }
-        i += stride;
-    }
-    let last = points[points.len() - 1];
-    if out.last() != Some(&last) {
-        out.push(last);
-    }
-    out
+    Row { upper, lower }
 }
 
 /// Build the wing's analytic STEP model: one closed solid per half-wing
@@ -159,14 +115,11 @@ pub fn wing_model(
     }
 
     let quality = ResolvedQuality {
-        chord_samples: chord_samples_for(stations, tolerances.max_chordal_deviation),
+        chord_samples: STEP_CHORD_SAMPLES,
         span_subdivisions: span_subdivisions(stations, tolerances.max_edge_length),
     };
     let rings = loft_rings(stations, &quality, panel_tangencies);
-    let rows: Vec<Row> = rings
-        .iter()
-        .map(|r| ring_rows(r, row_chord(&rings)))
-        .collect();
+    let rows: Vec<Row> = rings.iter().map(ring_rows).collect();
     let last = rows.len() - 1;
 
     // Section curves: rows share chordwise parameters, so the skins' natural
@@ -471,18 +424,11 @@ impl StepModel {
     }
 }
 
-fn row_chord(rings: &[crate::section::Ring]) -> f64 {
-    let ring = &rings[0];
-    let k = ring.points.len() / 2;
-    let le = ring.points[0];
-    let te = ring.points[k - 1];
-    crate::mesh::vnorm(crate::mesh::vsub(te, le)).max(1e-6)
-}
-
-fn chord_samples_for(stations: &[EvaluatedStation], max_chordal_deviation: f64) -> usize {
-    let _ = (stations, max_chordal_deviation);
-    96
-}
+/// Chord samples per surface per STEP ring. The rows interpolate through
+/// every ring sample, so this count is the analytic surfaces' chordwise
+/// resolution: dense enough to hold the leading-edge nose, sparse enough
+/// that the global cubic interpolation stays well-conditioned.
+const STEP_CHORD_SAMPLES: usize = 96;
 
 fn span_subdivisions(stations: &[EvaluatedStation], max_edge_length: f64) -> Vec<usize> {
     stations
