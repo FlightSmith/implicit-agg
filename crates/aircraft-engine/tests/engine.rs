@@ -431,9 +431,7 @@ fn step_model_shells_are_closed_and_oriented() {
 
 #[test]
 fn step_skin_knots_are_clamped_and_consistent() {
-    let (doc, _) =
-        parse_document(&std::fs::read_to_string("/dev/shm/cranked-wing-study-001.json").unwrap())
-            .unwrap();
+    let (doc, _) = parse_document(include_str!("fixtures/cranked-wing-tangency.json")).unwrap();
     let engine = Engine::open(doc).unwrap();
     let symmetry = true;
     let (_, stations) = engine.evaluated_stations(0).unwrap();
