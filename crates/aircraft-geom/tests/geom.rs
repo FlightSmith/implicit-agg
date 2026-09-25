@@ -449,8 +449,9 @@ fn volume_metrics_report_both_bases() {
 #[test]
 fn export_quality_resolves_chord_samples_from_deviation() {
     let curve = naca("0012");
+    let chord = 2.0;
     let tight = resolve_quality(
-        &[&curve],
+        &[(&curve, chord)],
         &[2.0],
         &[0.0],
         &MeshQuality::Export(ExportTolerances {
@@ -460,10 +461,41 @@ fn export_quality_resolves_chord_samples_from_deviation() {
         }),
     );
     assert!(tight.chord_samples >= 64, "tight tolerance needs sampling");
-    assert!(curve.chordal_deviation(tight.chord_samples) <= 1.0e-4);
+    // The budget is absolute: the chord scales the fraction deviation.
+    assert!(
+        curve.chordal_deviation(tight.chord_samples) * chord <= 1.0e-4,
+        "resolved sampling must meet the meter tolerance on a {chord} m chord"
+    );
+
+    // The same fraction deviation is twice the error in meters on a doubled
+    // chord, so the larger wing needs more samples for the same budget.
+    let small = resolve_quality(
+        &[(&curve, 0.5)],
+        &[2.0],
+        &[0.0],
+        &MeshQuality::Export(ExportTolerances {
+            max_chordal_deviation: Some(5.0e-4),
+            max_edge_length: Some(0.5),
+            max_normal_angle_deg: Some(10.0),
+        }),
+    );
+    let large = resolve_quality(
+        &[(&curve, 4.0)],
+        &[2.0],
+        &[0.0],
+        &MeshQuality::Export(ExportTolerances {
+            max_chordal_deviation: Some(5.0e-4),
+            max_edge_length: Some(0.5),
+            max_normal_angle_deg: Some(10.0),
+        }),
+    );
+    assert!(
+        large.chord_samples > small.chord_samples,
+        "larger chord needs denser sampling for the same meter budget"
+    );
 
     let loose = resolve_quality(
-        &[&curve],
+        &[(&curve, chord)],
         &[2.0],
         &[0.0],
         &MeshQuality::Export(ExportTolerances {
@@ -482,7 +514,8 @@ fn export_quality_resolves_chord_samples_from_deviation() {
 fn interactive_quality_scales_span_stations_with_panel_share() {
     let curve = naca("0012");
     // A single panel spanning the whole model gets the full station budget.
-    let single = resolve_quality(&[&curve], &[2.0], &[0.0], &MeshQuality::Interactive);
+    // A small chord meets the interactive sag budget at the sampling floor.
+    let single = resolve_quality(&[(&curve, 0.5)], &[2.0], &[0.0], &MeshQuality::Interactive);
     assert_eq!(single.chord_samples, 48);
     assert_eq!(
         single.span_subdivisions[0],
@@ -490,13 +523,27 @@ fn interactive_quality_scales_span_stations_with_panel_share() {
     );
     // Two equal panels split the budget.
     let split = resolve_quality(
-        &[&curve],
+        &[(&curve, 0.5), (&curve, 0.5)],
         &[2.0, 2.0],
         &[0.0, 0.0],
         &MeshQuality::Interactive,
     );
     assert_eq!(split.span_subdivisions[0], 10);
     assert_eq!(split.span_subdivisions[1], 10);
+}
+
+#[test]
+fn interactive_quality_scales_chord_samples_with_chord() {
+    let curve = naca("0012");
+    // The same airfoil at a large chord needs more samples to keep the
+    // absolute leading-edge sag within the interactive budget.
+    let small = resolve_quality(&[(&curve, 0.5)], &[2.0], &[0.0], &MeshQuality::Interactive);
+    let large = resolve_quality(&[(&curve, 4.0)], &[2.0], &[0.0], &MeshQuality::Interactive);
+    assert!(large.chord_samples > small.chord_samples);
+    assert!(
+        curve.chordal_deviation(large.chord_samples) * 4.0 <= 1.5e-3,
+        "large-chord preview must meet the interactive sag budget"
+    );
 }
 
 use aircraft_geom::quality::INTERACTIVE_STATIONS_PER_SPAN;

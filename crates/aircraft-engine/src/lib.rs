@@ -787,7 +787,10 @@ fn resolved_geometry_quality(
     stations: &[EvaluatedStation],
     quality: MeshQuality,
 ) -> aircraft_geom::ResolvedQuality {
-    let curves: Vec<&ProfileCurve> = stations.iter().map(|s| s.curve.as_ref()).collect();
+    let curves: Vec<(&ProfileCurve, f64)> = stations
+        .iter()
+        .map(|s| (s.curve.as_ref(), s.chord))
+        .collect();
     let panel_spans: Vec<f64> = stations
         .windows(2)
         .map(|pair| {
