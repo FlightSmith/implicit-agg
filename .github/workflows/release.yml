@@ -29,7 +29,9 @@ jobs:
             target: aarch64-apple-darwin
             archive: implicit-agg-cli-macos-arm64
             binary: aircraft
-          - os: macos-13
+          # Intel macOS cross-compiles on the arm64 runner; the macos-13
+          # Intel runner queue proved unreliable (multi-hour hangs).
+          - os: macos-14
             target: x86_64-apple-darwin
             archive: implicit-agg-cli-macos-x64
             binary: aircraft
